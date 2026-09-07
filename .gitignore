@@ -19,10 +19,43 @@ coverage/
 # Frontend dependencies and build caches
 **/node_modules/
 **/dist/
+**/out-tsc/
+**/bazel-out/
 **/.angular/
 **/.cache/
+**/.nx/
+**/.vite/
+**/.vitest/
+**/.pnpm-store/
+**/.npm/
+**/.nyc_output/
 **/coverage/
+**/storybook-static/
+**/playwright-report/
+**/playwright/.auth/
+**/test-results/
+**/blob-report/
+.eslintcache
+.stylelintcache
+.node_repl_history
 *.tsbuildinfo
+*.tgz
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Python and uv tooling
+**/.venv/
+**/__pycache__/
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+*.py[cod]
+.coverage
+.coverage.*
+htmlcov/
 
 # Local configuration and secrets
 **/.env

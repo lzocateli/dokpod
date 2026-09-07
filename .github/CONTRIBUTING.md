@@ -21,6 +21,12 @@ Até que um Contributor License Agreement ou mecanismo equivalente seja aprovado
 4. Execute os gates aplicáveis e registre os resultados no pull request.
 5. Use os [Conventional Commits](COMMIT_CONVENTIONS.md).
 
+## Scripts e automação
+
+Automações globais de infraestrutura, administração, manutenção e validação ficam em `tools/scripts/`. Escolha PowerShell 7 para orquestração de CLIs e sistema; escolha Python para parsing, APIs ou lógica reutilizável e execute-o exclusivamente com `uv` pelo projeto compartilhado `tools/pyproject.toml`.
+
+Scripts de build, entrypoint, health check, instalação ou runtime permanecem no módulo proprietário. Consulte [Scripts e automação](SCRIPTING.md) antes de criar ou mover um script.
+
 ## Comandos esperados
 
 Os comandos definitivos serão fixados com o scaffolding. Backend e frontend não dependem de SDKs instalados no host: restore, build, testes e execução usam imagens de toolchain fixadas. A interface mínima esperada é:

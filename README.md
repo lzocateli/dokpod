@@ -130,6 +130,7 @@ deploy/                      # imagens, pacote Windows, Keycloak, Compose e oper
 docs/
   adr/                       # decisões arquiteturais
   plan/                      # planos verificáveis
+tools/scripts/               # automação global de infraestrutura e manutenção
 ```
 
 ## Documentação
@@ -142,6 +143,7 @@ docs/
 - [Configuração do Keycloak](docs/configuracao-keycloak.md)
 - [Distribuição e operação](docs/distribuicao.md)
 - [Licenciamento e comercialização](docs/licenciamento.md)
+- [Scripts e automação](.github/SCRIPTING.md)
 - [ADR da arquitetura inicial](docs/adr/2026-0001-arquitetura-inicial.md)
 - [ADR de distribuição e identidade](docs/adr/2026-0002-distribuicao-e-identidade.md)
 - [ADR de licenciamento e edições](docs/adr/2026-0003-licenciamento-e-edicoes.md)

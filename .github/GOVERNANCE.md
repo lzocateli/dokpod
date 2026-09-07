@@ -10,6 +10,7 @@ Esta pasta concentra regras de contribuição, segurança, decisões e instruç�
 - `prompts/`: comandos focados para planejar, implementar, diagnosticar, testar e revisar;
 - `skills/`: workflows completos com gates de engenharia;
 - `COPILOT_GUIDE.md`: guia de escolha e uso das customizações;
+- `SCRIPTING.md`: localização, linguagem e contrato das automações do repositório;
 - `ADR_TEMPLATE.md`: modelo para decisões arquiteturais;
 - `PLAN_TEMPLATE.md`: modelo para planos verificáveis;
 - `COMMIT_CONVENTIONS.md`: tipos e escopos de commit;

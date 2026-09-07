@@ -26,6 +26,7 @@ contracts/openapi/         # contrato público HTTP
 contracts/agent/           # protocolo agente-servidor
 deploy/                    # imagens, pacote Windows, Keycloak e operação
 docs/                      # arquitetura, ADRs, planos e runbooks
+tools/scripts/             # automação global de infraestrutura e manutenção
 ```
 
 Não crie dependências circulares. Hosts compõem; bibliotecas implementam regras reutilizáveis; contratos não dependem de aplicações.
@@ -44,6 +45,15 @@ Não crie dependências circulares. Hosts compõem; bibliotecas implementam regr
 - ADRs ficam em `docs/adr/AAAA-NNNN-titulo.md`, começam como `proposed` e seguem `.github/ADR_TEMPLATE.md`.
 - Planos ficam em `docs/plan/<tema>.md` e seguem `.github/PLAN_TEMPLATE.md`.
 - IA não marca ADR como `accepted`, plano como `approved` nem etapa como `completed` sem decisão ou evidência humana explícita.
+
+## Scripts e automação
+
+- Toda automação global de infraestrutura, administração, manutenção e validação pertence a `tools/scripts/`.
+- Use PowerShell 7 para orquestração de CLIs, containers e sistema; use Python para parsing estruturado, APIs, lógica reutilizável ou testável.
+- Ferramentas Python usam exclusivamente `uv`, compartilham o único `tools/pyproject.toml` e mantêm `tools/uv.lock` versionado.
+- Não crie `requirements.txt`, ambientes virtuais manuais, outro `pyproject.toml` para automação ou scripts globais fora de `tools/scripts/`.
+- Scripts de build, entrypoint, health check, instalação ou runtime permanecem no módulo proprietário.
+- Todo script criado ou refatorado oferece `--help` sem efeitos colaterais e segue `.github/instructions/script-authoring.instructions.md` e `.github/SCRIPTING.md`.
 
 ## Regras invariáveis
 
