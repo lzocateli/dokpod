@@ -1,0 +1,55 @@
+# .NET build and test outputs
+**/[Bb]in/
+**/[Oo]bj/
+**/[Tt]est[Rr]esults/
+artifacts/
+coverage/
+*.coverage
+*.coveragexml
+*.trx
+
+# Visual Studio, JetBrains and user-specific files
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Frontend dependencies and build caches
+**/node_modules/
+**/dist/
+**/.angular/
+**/.cache/
+**/coverage/
+*.tsbuildinfo
+
+# Local configuration and secrets
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+!**/.env.*.example
+!**/.env.*.template
+**/appsettings.Local.json
+**/secrets.json
+*.key
+*.p12
+*.pfx
+
+# Runtime state and logs
+**/.data-protection-keys/
+**/logs/
+*.log
+*.pid
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary and backup files
+*.bak
+*.swp
+*.tmp
+*~

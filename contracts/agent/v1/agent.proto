@@ -1,0 +1,198 @@
+syntax = "proto3";
+
+package dokpod.agent.v1;
+
+option csharp_namespace = "Dokpod.Agent.Contracts.V1";
+
+import "google/protobuf/timestamp.proto";
+
+service AgentControl {
+  rpc Connect(stream AgentMessage) returns (stream ControlPlaneMessage);
+}
+
+message MessageMetadata {
+  string protocol_version = 1;
+  string session_id = 2;
+  uint64 fencing_token = 3;
+  uint64 sequence = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+  string correlation_id = 6;
+}
+
+message AgentMessage {
+  MessageMetadata metadata = 1;
+
+  oneof payload {
+    AgentHello hello = 10;
+    Heartbeat heartbeat = 11;
+    InventorySnapshotPage snapshot_page = 12;
+    InventoryDelta inventory_delta = 13;
+    CommandAccepted command_accepted = 14;
+    CommandResult command_result = 15;
+    ReconciliationState reconciliation_state = 16;
+  }
+}
+
+message ControlPlaneMessage {
+  MessageMetadata metadata = 1;
+
+  oneof payload {
+    SessionEstablished session_established = 10;
+    AgentCommand command = 11;
+    SnapshotRequest snapshot_request = 12;
+    ReconciliationRequest reconciliation_request = 13;
+  }
+}
+
+message AgentHello {
+  string agent_version = 1;
+  EngineKind engine = 2;
+  string engine_version = 3;
+  OperatingSystem operating_system = 4;
+  string operating_system_version = 5;
+  Architecture architecture = 6;
+  repeated Capability capabilities = 7;
+  repeated string supported_protocol_versions = 8;
+}
+
+message SessionEstablished {
+  string selected_protocol_version = 1;
+  string session_id = 2;
+  uint64 fencing_token = 3;
+  uint32 heartbeat_interval_seconds = 4;
+  uint32 maximum_message_bytes = 5;
+}
+
+message Heartbeat {
+  uint64 last_applied_command_sequence = 1;
+  uint64 inventory_revision = 2;
+}
+
+message InventorySnapshotPage {
+  string snapshot_id = 1;
+  uint64 inventory_revision = 2;
+  uint32 page_number = 3;
+  bool is_last_page = 4;
+  repeated ContainerState containers = 5;
+}
+
+message InventoryDelta {
+  uint64 base_revision = 1;
+  uint64 inventory_revision = 2;
+  repeated ContainerChange changes = 3;
+}
+
+message ContainerChange {
+  ChangeKind kind = 1;
+  ContainerState container = 2;
+  string container_id = 3;
+}
+
+message ContainerState {
+  string container_id = 1;
+  string name = 2;
+  string image_reference = 3;
+  ContainerLifecycleState state = 4;
+  string revision = 5;
+  google.protobuf.Timestamp observed_at = 6;
+}
+
+message AgentCommand {
+  string command_id = 1;
+  CommandKind kind = 2;
+  string container_id = 3;
+  string expected_container_revision = 4;
+  bytes payload_hash = 5;
+  google.protobuf.Timestamp deadline = 6;
+}
+
+message CommandAccepted {
+  string command_id = 1;
+  CommandAcceptance acceptance = 2;
+  string failure_code = 3;
+}
+
+message CommandResult {
+  string command_id = 1;
+  CommandResultState state = 2;
+  string failure_code = 3;
+  string observed_container_revision = 4;
+  google.protobuf.Timestamp completed_at = 5;
+}
+
+message SnapshotRequest {
+  string reason_code = 1;
+}
+
+message ReconciliationRequest {
+  repeated string command_ids = 1;
+}
+
+message ReconciliationState {
+  repeated CommandResult results = 1;
+}
+
+enum EngineKind {
+  ENGINE_KIND_UNSPECIFIED = 0;
+  ENGINE_KIND_DOCKER = 1;
+  ENGINE_KIND_PODMAN = 2;
+}
+
+enum OperatingSystem {
+  OPERATING_SYSTEM_UNSPECIFIED = 0;
+  OPERATING_SYSTEM_LINUX = 1;
+  OPERATING_SYSTEM_WINDOWS = 2;
+}
+
+enum Architecture {
+  ARCHITECTURE_UNSPECIFIED = 0;
+  ARCHITECTURE_AMD64 = 1;
+  ARCHITECTURE_ARM64 = 2;
+}
+
+enum Capability {
+  CAPABILITY_UNSPECIFIED = 0;
+  CAPABILITY_INVENTORY = 1;
+  CAPABILITY_CONTAINER_START = 2;
+  CAPABILITY_CONTAINER_STOP = 3;
+  CAPABILITY_CONTAINER_RESTART = 4;
+  CAPABILITY_CONTAINER_DELETE = 5;
+}
+
+enum ChangeKind {
+  CHANGE_KIND_UNSPECIFIED = 0;
+  CHANGE_KIND_UPSERT = 1;
+  CHANGE_KIND_REMOVE = 2;
+}
+
+enum ContainerLifecycleState {
+  CONTAINER_LIFECYCLE_STATE_UNSPECIFIED = 0;
+  CONTAINER_LIFECYCLE_STATE_CREATED = 1;
+  CONTAINER_LIFECYCLE_STATE_RUNNING = 2;
+  CONTAINER_LIFECYCLE_STATE_PAUSED = 3;
+  CONTAINER_LIFECYCLE_STATE_RESTARTING = 4;
+  CONTAINER_LIFECYCLE_STATE_EXITED = 5;
+  CONTAINER_LIFECYCLE_STATE_DEAD = 6;
+}
+
+enum CommandKind {
+  COMMAND_KIND_UNSPECIFIED = 0;
+  COMMAND_KIND_START_CONTAINER = 1;
+  COMMAND_KIND_STOP_CONTAINER = 2;
+  COMMAND_KIND_RESTART_CONTAINER = 3;
+  COMMAND_KIND_DELETE_CONTAINER = 4;
+}
+
+enum CommandAcceptance {
+  COMMAND_ACCEPTANCE_UNSPECIFIED = 0;
+  COMMAND_ACCEPTANCE_ACCEPTED = 1;
+  COMMAND_ACCEPTANCE_DUPLICATE = 2;
+  COMMAND_ACCEPTANCE_REJECTED = 3;
+}
+
+enum CommandResultState {
+  COMMAND_RESULT_STATE_UNSPECIFIED = 0;
+  COMMAND_RESULT_STATE_SUCCEEDED = 1;
+  COMMAND_RESULT_STATE_FAILED = 2;
+  COMMAND_RESULT_STATE_INDETERMINATE = 3;
+}

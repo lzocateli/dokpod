@@ -1,0 +1,83 @@
+@import url("./fonts.css");
+@import url("./tokens.css");
+@import url("./primitives.css");
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--dok-color-canvas);
+  color: var(--dok-color-text);
+  font-family: var(--dok-font-interface);
+  font-size: 100%;
+  line-height: var(--dok-line-height-body);
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-width: 20rem;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--dok-color-canvas);
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid var(--dok-color-focus);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--dok-color-selection);
+  color: var(--dok-color-text);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-block-start: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--dok-font-display);
+  line-height: var(--dok-line-height-tight);
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--dok-font-data);
+}
+
+svg {
+  flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

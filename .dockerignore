@@ -1,0 +1,12 @@
+.git
+.github
+.vscode
+**/.env
+**/.env.*
+**/bin
+**/obj
+**/TestResults
+frontend
+docs
+*.user
+*.suo

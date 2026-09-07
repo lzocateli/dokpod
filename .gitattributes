@@ -1,0 +1,28 @@
+# Normalize text files in the repository.
+* text=auto eol=lf
+
+# Windows-native scripts retain their expected line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Keep container and Unix entrypoints executable after checkout.
+*.sh text eol=lf
+**/entrypoint* text eol=lf
+
+# Common binary formats.
+*.7z binary
+*.dll binary
+*.exe binary
+*.gif binary
+*.gz binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.png binary
+*.p12 binary
+*.pfx binary
+*.snk binary
+*.tar binary
+*.zip binary
