@@ -67,3 +67,5 @@ Não declare esses comandos como disponíveis antes de os manifests corresponden
 ## Pull requests
 
 Mantenha PRs coesos e pequenos o bastante para revisão responsável. Mudanças incompatíveis exigem issue, ADR quando aplicável, estratégia de migração e período de compatibilidade. Não misture refactor amplo com mudança funcional.
+
+Toda alteração é propriedade de `@lzocateli`, conforme o [`CODEOWNERS`](CODEOWNERS). Pull requests de terceiros somente podem ser promovidos para `main` após aprovação do proprietário, e apenas o proprietário executa o merge. Aprovação ou participação em uma revisão não concede permissão administrativa nem autoridade para promover código.
