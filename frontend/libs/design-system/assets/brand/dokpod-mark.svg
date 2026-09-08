@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Dokpod</title>
+  <rect x="2" y="2" width="60" height="60" rx="3" fill="#b7f34a"/>
+  <path d="M16 14H35C46 14 52 21 52 32C52 43 46 50 35 50H16V14Z" fill="#0b1210"/>
+  <path d="M27 24H34C39 24 42 27 42 32C42 37 39 40 34 40H27V24Z" fill="#b7f34a"/>
+  <rect x="10" y="27" width="11" height="10" fill="#b7f34a" stroke="#0b1210" stroke-width="4"/>
+</svg>

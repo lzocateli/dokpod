@@ -1,0 +1,48 @@
+name: Relatar defeito
+description: Registre um comportamento incorreto reproduzível
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: "Não inclua tokens, chaves, dados reais ou detalhes de vulnerabilidade. Use Security Advisories para segurança."
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Comportamento observado
+      description: O que ocorreu e qual era o resultado esperado?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reprodução mínima
+      description: Passos com dados fictícios.
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      options: [Docker, Podman, Não aplicável, Desconhecido]
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Plataforma e versões
+      placeholder: "Dokpod, agente, engine e sistema operacional"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidências sanitizadas
+      description: Logs mínimos sem secrets, correlation ID e screenshots quando úteis.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Segurança dos dados
+      options:
+        - label: Removi credenciais, chaves, dados pessoais e conteúdo sensível.
+          required: true

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Ícone do Dokpod</title>
+  <desc id="description">Monograma D verde sobre uma malha técnica grafite.</desc>
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#24312e" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="512" height="512" rx="32" fill="#0b1210"/>
+  <rect width="512" height="512" rx="32" fill="url(#grid)"/>
+  <rect x="96" y="96" width="320" height="320" rx="16" fill="#b7f34a"/>
+  <path d="M166 156H278C344 156 380 193 380 256C380 319 344 356 278 356H166V156Z" fill="#0b1210"/>
+  <path d="M230 211H274C303 211 319 227 319 256C319 285 303 301 274 301H230V211Z" fill="#b7f34a"/>
+  <rect x="130" y="226" width="61" height="60" fill="#b7f34a" stroke="#0b1210" stroke-width="22"/>
+</svg>

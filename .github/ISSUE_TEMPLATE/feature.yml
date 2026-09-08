@@ -1,0 +1,37 @@
+name: Propor funcionalidade
+description: Descreva um problema e um resultado verificável
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: Quem é afetado e por quê?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Resultado esperado
+      description: Descreva comportamento observável, não apenas uma implementação.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Escopo e não escopo
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Segurança, compatibilidade e operação
+      description: Considere privilégio do engine, agentes antigos, rollback e auditoria.
+  - type: checkboxes
+    id: decision
+    attributes:
+      label: Decisão arquitetural
+      options:
+        - label: Avaliei se a proposta exige ADR.
+          required: true

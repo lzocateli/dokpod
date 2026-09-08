@@ -1,0 +1,27 @@
+{
+  "name": "Dokpod",
+  "short_name": "Dokpod",
+  "description": "Controle local e visão operacional de containers Docker e Podman.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1210",
+  "theme_color": "#0b1210",
+  "icons": [
+    {
+      "src": "app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

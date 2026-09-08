@@ -1,0 +1,153 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build-agent-image",
+			"type": "shell",
+			"command": "docker",
+			"args": [
+				"build",
+				"--file",
+				"deploy/agent/Dockerfile",
+				"--tag",
+				"dokpod/agent:dev",
+				"."
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "smoke-agent-image",
+			"type": "shell",
+			"command": "docker",
+			"args": [
+				"run",
+				"--rm",
+				"--group-add",
+				"0",
+				"--read-only",
+				"--tmpfs",
+				"/tmp:rw,noexec,nosuid,size=16m",
+				"--tmpfs",
+				"/var/lib/dokpod-agent:rw,noexec,nosuid,size=16m,uid=1654,gid=1654,mode=0700",
+				"--volume",
+				"/var/run/docker.sock:/run/docker.sock",
+				"--env",
+				"DOKPOD_AGENT_RUN_ONCE=true",
+				"dokpod/agent:dev"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "test-docker-integration-container",
+			"type": "shell",
+			"command": "docker",
+			"args": [
+				"run",
+				"--rm",
+				"--group-add",
+				"0",
+				"--volume",
+				"${workspaceFolder}:/workspace",
+				"--volume",
+				"/var/run/docker.sock:/var/run/docker.sock",
+				"--workdir",
+				"/workspace/backend",
+				"lzocateli/dotnet-sdk:10.0.400-noble",
+				"dotnet",
+				"test",
+				"tests/Dokpod.Agent.Docker.IntegrationTests/Dokpod.Agent.Docker.IntegrationTests.csproj",
+				"--configuration",
+				"Release",
+				"--verbosity",
+				"minimal"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "test"
+		},
+		{
+			"label": "test-backend-container",
+			"type": "shell",
+			"command": "docker",
+			"args": [
+				"run",
+				"--rm",
+				"--volume",
+				"${workspaceFolder}:/workspace",
+				"--workdir",
+				"/workspace",
+				"lzocateli/dotnet-sdk:10.0.400-noble",
+				"dotnet",
+				"test",
+				"Dokpod.slnx",
+				"--configuration",
+				"Release",
+				"--verbosity",
+				"minimal"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "test"
+		},
+		{
+			"label": "build-backend-container",
+			"type": "shell",
+			"command": "docker",
+			"args": [
+				"run",
+				"--rm",
+				"--volume",
+				"${workspaceFolder}:/workspace",
+				"--workdir",
+				"/workspace",
+				"lzocateli/dotnet-sdk:10.0.400-noble",
+				"dotnet",
+				"build",
+				"Dokpod.slnx",
+				"--configuration",
+				"Release",
+				"--verbosity",
+				"minimal"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		},
+		{
+			"label": "test-domain-container",
+			"type": "shell",
+			"command": "docker",
+			"args": [
+				"run",
+				"--rm",
+				"--volume",
+				"${workspaceFolder}:/workspace",
+				"--workdir",
+				"/workspace/backend",
+				"lzocateli/dotnet-sdk:10.0.400-noble",
+				"dotnet",
+				"test",
+				"tests/Dokpod.Domain.Tests/Dokpod.Domain.Tests.csproj",
+				"--configuration",
+				"Release",
+				"--verbosity",
+				"minimal"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "test"
+		}
+	]
+}

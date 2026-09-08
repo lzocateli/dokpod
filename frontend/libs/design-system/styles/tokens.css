@@ -1,0 +1,164 @@
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --dok-color-canvas: #f3f6f2;
+  --dok-color-surface: #ffffff;
+  --dok-color-surface-subtle: #e7ece7;
+  --dok-color-surface-strong: #d7dfd9;
+  --dok-color-text: #101713;
+  --dok-color-text-muted: #4f5e57;
+  --dok-color-text-faint: #6b7972;
+  --dok-color-border: #a8b4ad;
+  --dok-color-border-strong: #687871;
+  --dok-color-accent: #4f7900;
+  --dok-color-accent-hover: #3d6100;
+  --dok-color-accent-surface: #ddf7ad;
+  --dok-color-on-accent: #ffffff;
+  --dok-color-focus: #315f00;
+  --dok-color-selection: #cbea8e;
+  --dok-color-success: #23633f;
+  --dok-color-success-surface: #d9f2e3;
+  --dok-color-warning: #765200;
+  --dok-color-warning-surface: #f8e7b1;
+  --dok-color-danger: #a12c2c;
+  --dok-color-danger-surface: #f9dddd;
+  --dok-color-info: #1d6077;
+  --dok-color-info-surface: #d7edf3;
+  --dok-color-overlay: rgb(11 18 16 / 64%);
+  --dok-shadow-raised: 3px 3px 0 rgb(16 23 19 / 18%);
+  --dok-grid-line: rgb(49 66 62 / 10%);
+
+  --dok-font-display: "IBM Plex Serif", Georgia, serif;
+  --dok-font-interface: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --dok-font-data: "IBM Plex Mono", Consolas, monospace;
+
+  --dok-font-size-xs: 0.75rem;
+  --dok-font-size-sm: 0.875rem;
+  --dok-font-size-md: 1rem;
+  --dok-font-size-lg: 1.25rem;
+  --dok-font-size-xl: 1.75rem;
+  --dok-font-size-2xl: 2.5rem;
+  --dok-line-height-tight: 1.15;
+  --dok-line-height-body: 1.5;
+  --dok-line-height-data: 1.35;
+
+  --dok-space-1: 0.25rem;
+  --dok-space-2: 0.5rem;
+  --dok-space-3: 0.75rem;
+  --dok-space-4: 1rem;
+  --dok-space-5: 1.5rem;
+  --dok-space-6: 2rem;
+  --dok-space-7: 3rem;
+
+  --dok-radius-sm: 2px;
+  --dok-radius-md: 4px;
+  --dok-radius-lg: 6px;
+  --dok-border-width: 1px;
+  --dok-control-height: 2.25rem;
+  --dok-icon-size: 1.125rem;
+  --dok-content-max: 90rem;
+  --dok-transition-fast: 120ms;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --dok-color-canvas: #0b1210;
+  --dok-color-surface: #111b18;
+  --dok-color-surface-subtle: #18241f;
+  --dok-color-surface-strong: #23312d;
+  --dok-color-text: #f4f7f5;
+  --dok-color-text-muted: #a9b5b1;
+  --dok-color-text-faint: #82918b;
+  --dok-color-border: #35453f;
+  --dok-color-border-strong: #60716a;
+  --dok-color-accent: #b7f34a;
+  --dok-color-accent-hover: #cbff68;
+  --dok-color-accent-surface: #263b13;
+  --dok-color-on-accent: #0b1210;
+  --dok-color-focus: #cbff68;
+  --dok-color-selection: #385316;
+  --dok-color-success: #73d69b;
+  --dok-color-success-surface: #173525;
+  --dok-color-warning: #f0c45c;
+  --dok-color-warning-surface: #3d3012;
+  --dok-color-danger: #ff8d8d;
+  --dok-color-danger-surface: #442020;
+  --dok-color-info: #76cbe4;
+  --dok-color-info-surface: #15333d;
+  --dok-color-overlay: rgb(0 0 0 / 72%);
+  --dok-shadow-raised: 3px 3px 0 rgb(0 0 0 / 42%);
+  --dok-grid-line: rgb(82 99 95 / 22%);
+}
+
+:root[data-theme="high-contrast"] {
+  color-scheme: dark;
+
+  --dok-color-canvas: #000000;
+  --dok-color-surface: #000000;
+  --dok-color-surface-subtle: #111111;
+  --dok-color-surface-strong: #222222;
+  --dok-color-text: #ffffff;
+  --dok-color-text-muted: #ffffff;
+  --dok-color-text-faint: #e6e6e6;
+  --dok-color-border: #ffffff;
+  --dok-color-border-strong: #ffffff;
+  --dok-color-accent: #c4ff4d;
+  --dok-color-accent-hover: #d8ff8a;
+  --dok-color-accent-surface: #203000;
+  --dok-color-on-accent: #000000;
+  --dok-color-focus: #ffe66d;
+  --dok-color-selection: #355000;
+  --dok-color-success: #7dffad;
+  --dok-color-success-surface: #002e16;
+  --dok-color-warning: #ffe66d;
+  --dok-color-warning-surface: #3a3000;
+  --dok-color-danger: #ff9b9b;
+  --dok-color-danger-surface: #3b0000;
+  --dok-color-info: #8ee7ff;
+  --dok-color-info-surface: #003344;
+  --dok-color-overlay: rgb(0 0 0 / 82%);
+  --dok-shadow-raised: 3px 3px 0 #ffffff;
+  --dok-grid-line: rgb(255 255 255 / 18%);
+  --dok-border-width: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --dok-color-canvas: #0b1210;
+    --dok-color-surface: #111b18;
+    --dok-color-surface-subtle: #18241f;
+    --dok-color-surface-strong: #23312d;
+    --dok-color-text: #f4f7f5;
+    --dok-color-text-muted: #a9b5b1;
+    --dok-color-text-faint: #82918b;
+    --dok-color-border: #35453f;
+    --dok-color-border-strong: #60716a;
+    --dok-color-accent: #b7f34a;
+    --dok-color-accent-hover: #cbff68;
+    --dok-color-accent-surface: #263b13;
+    --dok-color-on-accent: #0b1210;
+    --dok-color-focus: #cbff68;
+    --dok-color-selection: #385316;
+    --dok-color-success: #73d69b;
+    --dok-color-success-surface: #173525;
+    --dok-color-warning: #f0c45c;
+    --dok-color-warning-surface: #3d3012;
+    --dok-color-danger: #ff8d8d;
+    --dok-color-danger-surface: #442020;
+    --dok-color-info: #76cbe4;
+    --dok-color-info-surface: #15333d;
+    --dok-color-overlay: rgb(0 0 0 / 72%);
+    --dok-shadow-raised: 3px 3px 0 rgb(0 0 0 / 42%);
+    --dok-grid-line: rgb(82 99 95 / 22%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dok-transition-fast: 0ms;
+  }
+}
