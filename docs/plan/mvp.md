@@ -2,7 +2,7 @@
 
 **Status:** proposed  
 **Data de criação:** 2026-09-06  
-**Última atualização:** 2026-09-06  
+**Última atualização:** 2026-09-08
 **Responsáveis:** equipe Dokpod  
 **Origem:** IA assistida  
 **Revisor humano:** pendente  
@@ -65,6 +65,7 @@ Evidências:
 
 - `test-docker-integration-container`: 1 teste aprovado contra Docker Engine real pelo Unix socket, cobrindo negociação da API, listagem, início, reinício, parada e exclusão sem volumes ou force;
 - `test-backend-container`: 21 testes aprovados para deduplicação, fencing, deadline, revisão do alvo, resultado reconciliável, journal durável e negociação da identidade do agente por fingerprint;
+- comandos do protocolo são convertidos para o domínio somente após validar ambiente, fencing token, UUID, ID imutável do container, revisão, hash SHA-256 e deadline; entradas malformadas são rejeitadas antes de alcançar o engine;
 - `build-agent-image` e `smoke-agent-image`: imagem Linux construída e executada como usuário não root, filesystem read-only e acesso ao socket somente por grupo suplementar;
 - certificados sem EKU de cliente e versões de protocolo incompatíveis são rejeitados antes da ativação da sessão;
 - Kestrel com cadeia/revogação mTLS, cliente gRPC do agente, perda de resposta e reconexão permanecem pendentes.
@@ -242,3 +243,4 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-06 | plano | - | proposed | criação da proposta inicial | IA assistida |
 | 2026-09-07 | P-01 | not-started | in-progress | adapter Docker real e núcleo de journal iniciados; provas restantes pendentes | IA assistida |
 | 2026-09-07 | P-02 | not-started | in-progress | solução, dependências centralizadas e contrato v1 compilável criados | IA assistida |
+| 2026-09-08 | P-01 | in-progress | in-progress | serialização por ambiente/alvo e validação do mapeamento Protobuf para domínio comprovadas por 28 testes backend | IA assistida |
