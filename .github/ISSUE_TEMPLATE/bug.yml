@@ -1,7 +1,7 @@
 name: Relatar defeito
 description: Registre um comportamento incorreto reproduzível
 title: "[Bug]: "
-labels: ["bug", "triage"]
+labels: ["type:bug", "status:triage"]
 body:
   - type: markdown
     attributes:
@@ -25,6 +25,21 @@ body:
     attributes:
       label: Engine
       options: [Docker, Podman, Não aplicável, Desconhecido]
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridade percebida
+      options: [P0 - bloqueador, P1 - alta, P2 - normal, P3 - baixa]
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área afetada
+      multiple: true
+      options: [Backend, Frontend, Agente, Engines, Contratos, Banco de dados, Segurança, DevOps, Documentação, Testes]
     validations:
       required: true
   - type: input

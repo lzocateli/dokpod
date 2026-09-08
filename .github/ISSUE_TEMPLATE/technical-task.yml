@@ -1,0 +1,45 @@
+name: Tarefa técnica
+description: Registre uma tarefa técnica independente de feature ou plano
+title: "[Task]: "
+labels: ["type:task", "status:triage"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objetivo técnico
+      description: Descreva o resultado verificável da tarefa.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto e arquivos envolvidos
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critérios de aceite
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridade
+      options: [P0 - bloqueador, P1 - alta, P2 - normal, P3 - baixa]
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área responsável
+      multiple: true
+      options: [Arquitetura, Backend, Frontend, Agente, Engines, Contratos, Banco de dados, Segurança, DevOps, Documentação, Testes]
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Limites e não escopo
+    validations:
+      required: true

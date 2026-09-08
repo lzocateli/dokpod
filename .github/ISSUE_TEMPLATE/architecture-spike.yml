@@ -1,0 +1,46 @@
+name: Spike ou decisão arquitetural
+description: Registre uma investigação ou decisão que pode exigir ADR
+title: "[Spike]: "
+labels: ["type:spike", "status:triage"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Pergunta ou decisão a esclarecer
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto, alternativas e restrições
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidência esperada
+      description: Informe experimento, documento, métrica ou protótipo necessário.
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risco arquitetural
+      options: [baixo, médio, alto]
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Áreas envolvidas
+      multiple: true
+      options: [Arquitetura, Backend, Frontend, Agente, Engines, Contratos, Banco de dados, Segurança, DevOps, Documentação, Testes]
+    validations:
+      required: true
+  - type: checkboxes
+    id: governance
+    attributes:
+      label: Governança
+      options:
+        - label: Avaliei se a conclusão exige ADR antes da implementação.
+          required: true

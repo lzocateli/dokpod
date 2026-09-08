@@ -2,6 +2,9 @@
 
 Esta pasta concentra regras de contribuição, segurança, decisões e instruções contextuais para desenvolvimento assistido.
 
+O fluxo de demandas usa GitHub Issues e o Project `Dokpod Delivery`; a
+configuração versionada está em [docs/github-projeto-gestao.md](../docs/github-projeto-gestao.md).
+
 ## Conteúdo
 
 - `copilot-instructions.md`: contexto e regras invariáveis do Dokpod;

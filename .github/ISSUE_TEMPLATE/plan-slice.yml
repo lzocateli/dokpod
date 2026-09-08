@@ -1,0 +1,50 @@
+name: Executar slice do plano
+description: Delegue ao Copilot um slice aprovado e desbloqueado do Dokpod
+title: "[Plano]: "
+labels: ["type:plan-slice", "status:triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Esta Issue autoriza a implementação e validação do slice descrito.
+        Commit, push, merge, publicação e deploy continuam dependendo de
+        solicitação e aprovação explícitas.
+  - type: input
+    id: plan
+    attributes:
+      label: Plano e slice
+      description: Informe o plano e o identificador da etapa, por exemplo P-03 ou WP-02.
+      placeholder: docs/plan/nome-do-plano.md / P-XX
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Resultado observável
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critérios de aceite e validação
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Limites e não escopo
+    validations:
+      required: true
+  - type: checkboxes
+    id: authorization
+    attributes:
+      label: Autorizações e decisões humanas
+      options:
+        - label: O slice está aprovado e suas dependências estão atendidas.
+          required: true
+        - label: O Copilot pode editar arquivos e executar as validações deste slice.
+          required: true
+        - label: Commit, push, merge, publicação e deploy exigem autorização separada.
+          required: true
+        - label: Avaliei se o slice exige ADR ou outra decisão humana prévia.
+          required: true
