@@ -118,6 +118,7 @@ Não publique; produza matriz de gates e recomendação GO/NO-GO.
 - contratos: geração e testes de consumidor/provedor, incluindo N/N-1;
 - containers: build, inspeção e smoke test;
 - Windows: instalação e execução em host sem runtime .NET;
+- desempenho: perfis e evidências de `PERFORMANCE_TESTING_CRITERIA.md`;
 - segurança: autorização horizontal, agente falso/revogado, replay e vazamento de secrets.
 
 Execute primeiro a validação mais estreita que pode refutar a mudança. Amplie apenas após o recorte passar.

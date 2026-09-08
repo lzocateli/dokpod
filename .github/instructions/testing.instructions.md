@@ -16,5 +16,6 @@ applyTo: "backend/tests/**, frontend/tests/**, frontend/**/*.spec.ts, frontend/*
 - Segurança inclui Keycloak indisponível/revogado, token inválido, CSRF, autorização horizontal, agente falso, certificado revogado, SSRF e payload hostil.
 - Testes Windows declaram versão do host, RID, conta do serviço e engine e executam sem runtime .NET instalado.
 - Fixtures usam apenas dados sintéticos e nunca contêm credenciais.
+- Testes de carga e capacidade seguem `.github/PERFORMANCE_TESTING_CRITERIA.md`.
 - Teste alterado deve falhar sem a correção e passar com ela.
 - Registre comandos e resultados no pull request; não marque gate sem executar.

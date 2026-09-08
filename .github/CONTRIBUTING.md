@@ -6,6 +6,14 @@
 2. Procure issue, ADR e plano relacionados.
 3. Para mudança relevante, registre resultado observável, não escopo e riscos.
 4. Nunca inclua tokens, chaves, certificados privados, dados reais de infraestrutura ou logs sensíveis.
+5. Instale o hook obrigatório de detecção de secrets em cada clone:
+
+   ```powershell
+   ./tools/scripts/install-gitleaks-hook.ps1
+   git hook run pre-commit
+   ```
+
+   Consulte a [política de detecção de secrets](SECRET-SCANNING.md).
 
 ## Licenciamento de contribuições
 
@@ -27,31 +35,38 @@ Automações globais de infraestrutura, administração, manutenção e validaç
 
 Scripts de build, entrypoint, health check, instalação ou runtime permanecem no módulo proprietário. Consulte [Scripts e automação](SCRIPTING.md) antes de criar ou mover um script.
 
-## Comandos esperados
+## Comandos disponíveis
 
-Os comandos definitivos serão fixados com o scaffolding. Backend e frontend não dependem de SDKs instalados no host: restore, build, testes e execução usam imagens de toolchain fixadas. A interface mínima esperada é:
+Execute os comandos na raiz do repositório. O backend não depende de SDK .NET
+instalado no host; build e testes usam a imagem de toolchain fixada.
 
 ```powershell
-# Raiz do repositório
-docker compose --profile tooling run --rm dotnet-tooling dotnet restore Dokpod.slnx --locked-mode
-docker compose --profile tooling run --rm dotnet-tooling dotnet format Dokpod.slnx --verify-no-changes
-docker compose --profile tooling run --rm dotnet-tooling dotnet build Dokpod.slnx --no-restore
-docker compose --profile tooling run --rm dotnet-tooling dotnet test Dokpod.slnx --no-build
+docker run --rm --volume "${PWD}:/workspace" --workdir /workspace `
+   lzocateli/dotnet-sdk:10.0.400-noble `
+   dotnet build Dokpod.slnx --configuration Release --verbosity minimal
 
-# frontend/web
-docker compose --profile tooling run --rm frontend-tooling pnpm install --frozen-lockfile
-docker compose --profile tooling run --rm frontend-tooling pnpm format:check
-docker compose --profile tooling run --rm frontend-tooling pnpm lint
-docker compose --profile tooling run --rm frontend-tooling pnpm typecheck
-docker compose --profile tooling run --rm frontend-tooling pnpm test
-docker compose --profile tooling run --rm frontend-tooling pnpm build
-docker compose --profile tooling run --rm frontend-tooling pnpm e2e
-
-# Agente Windows, publicação cruzada; validar o artefato em Windows Server sem runtime .NET
-docker compose --profile tooling run --rm dotnet-tooling dotnet publish backend/apps/agent --runtime win-x64 --self-contained true
+docker run --rm --volume "${PWD}:/workspace" --workdir /workspace `
+   lzocateli/dotnet-sdk:10.0.400-noble `
+   dotnet test Dokpod.slnx --configuration Release --verbosity minimal
 ```
 
-Não declare esses comandos como disponíveis antes de os manifests correspondentes existirem. Não substitua os containers de toolchain por SDKs globais no fluxo oficial.
+O teste de integração Docker monta o socket do engine e concede privilégios
+equivalentes aos do daemon. Execute-o somente em clone e host confiáveis:
+
+```powershell
+docker run --rm --group-add 0 `
+   --volume "${PWD}:/workspace" `
+   --volume /var/run/docker.sock:/var/run/docker.sock `
+   --workdir /workspace/backend `
+   lzocateli/dotnet-sdk:10.0.400-noble `
+   dotnet test tests/Dokpod.Agent.Docker.IntegrationTests/Dokpod.Agent.Docker.IntegrationTests.csproj `
+      --configuration Release --verbosity minimal
+```
+
+As tarefas equivalentes estão em `.vscode/tasks.json`. Comandos de frontend,
+Compose e publicação do agente Windows serão documentados quando os respectivos
+manifests e gates existirem. Não substitua as toolchains containerizadas por SDKs
+globais no fluxo oficial.
 
 ## Definition of Done
 
@@ -61,6 +76,8 @@ Não declare esses comandos como disponíveis antes de os manifests corresponden
 - contratos e clientes gerados sincronizados;
 - segurança, acessibilidade, concorrência e desempenho considerados;
 - logs e métricas não expõem conteúdo sensível;
+- hook Gitleaks instalado e `Gitleaks / Full History` aprovado;
+- `CI / Result` aprovado;
 - rollout, rollback e compatibilidade documentados;
 - nenhum achado crítico ou alto aberto sem aceitação formal.
 
