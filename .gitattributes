@@ -9,6 +9,7 @@
 # Keep container and Unix entrypoints executable after checkout.
 *.sh text eol=lf
 **/entrypoint* text eol=lf
+.githooks/* text eol=lf
 
 # Web source and package metadata use stable Unix line endings.
 *.css text eol=lf

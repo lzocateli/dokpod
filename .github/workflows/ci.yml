@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - development
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    container:
+      image: lzocateli/dotnet-sdk:10.0.400-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test backend
+        run: dotnet test Dokpod.slnx --configuration Release --verbosity minimal
+
+  result:
+    name: Result
+    if: ${{ always() }}
+    needs:
+      - backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Evaluate required jobs
+        env:
+          BACKEND_RESULT: ${{ needs.backend.result }}
+        shell: bash
+        run: |
+          if [[ "$BACKEND_RESULT" != "success" ]]; then
+            echo "Backend terminou com: $BACKEND_RESULT"
+            exit 1
+          fi

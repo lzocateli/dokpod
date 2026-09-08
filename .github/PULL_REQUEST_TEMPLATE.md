@@ -1,3 +1,5 @@
+# Pull request
+
 ## Objetivo
 
 <!-- Problema resolvido e resultado observável. -->
@@ -25,6 +27,8 @@
 
 ## Evidências
 
+- [ ] `CI / Result`
+- [ ] `Gitleaks / Full History`
 - [ ] Formatação e análise estática
 - [ ] Build de produção
 - [ ] Testes unitários
@@ -45,6 +49,7 @@ Comandos e resultados:
 - [ ] Nenhum socket foi exposto nem proxy genérico adicionado
 - [ ] Nenhum secret ou dado sensível foi incluído
 - [ ] Dependências possuem licença e versão verificadas
+- [ ] Testes de carga seguem os critérios do Dokpod quando o caminho crítico foi alterado
 - [ ] Rollout, rollback e observabilidade estão documentados
 
 ## Riscos e limitações
