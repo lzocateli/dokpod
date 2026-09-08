@@ -1,5 +1,6 @@
 using Dokpod.Agent.Application.Engines;
 using Dokpod.Domain.Commands;
+using System.Collections.Concurrent;
 
 namespace Dokpod.Agent.Application.Commands;
 
@@ -9,6 +10,8 @@ public sealed class AgentCommandProcessor(
     IContainerEngine engine,
     TimeProvider timeProvider)
 {
+    private readonly ConcurrentDictionary<(Guid EnvironmentId, string ContainerId), SemaphoreSlim> mutationLocks = [];
+
     public async Task<JournaledCommandResult> ProcessAsync(
         AgentCommand command,
         long activeFencingToken,
@@ -26,35 +29,47 @@ public sealed class AgentCommandProcessor(
             return CreateResult(command, CommandExecutionState.Failed, MapAdmissionFailure(admission), null);
         }
 
-        var container = await engine.InspectContainerAsync(command.ContainerId, cancellationToken);
-        if (container is null)
-        {
-            return await SaveAsync(CreateResult(command, CommandExecutionState.Failed, "target_not_found", null));
-        }
-
-        if (!string.Equals(container.Revision, command.ExpectedContainerRevision, StringComparison.Ordinal))
-        {
-            return await SaveAsync(CreateResult(command, CommandExecutionState.Failed, "stale_target", container.Revision));
-        }
+        var mutationLock = mutationLocks.GetOrAdd(
+            (command.EnvironmentId, command.ContainerId),
+            static _ => new SemaphoreSlim(1, 1));
+        await mutationLock.WaitAsync(cancellationToken);
 
         try
         {
-            var mutation = await engine.ExecuteAsync(command.Kind, command.ContainerId, cancellationToken);
-            return await SaveAsync(CreateResult(
-                command,
-                mutation.Succeeded ? CommandExecutionState.Succeeded : CommandExecutionState.Failed,
-                mutation.FailureCode,
-                container.Revision));
+            var container = await engine.InspectContainerAsync(command.ContainerId, cancellationToken);
+            if (container is null)
+            {
+                return await SaveAsync(CreateResult(command, CommandExecutionState.Failed, "target_not_found", null));
+            }
+
+            if (!string.Equals(container.Revision, command.ExpectedContainerRevision, StringComparison.Ordinal))
+            {
+                return await SaveAsync(CreateResult(command, CommandExecutionState.Failed, "stale_target", container.Revision));
+            }
+
+            try
+            {
+                var mutation = await engine.ExecuteAsync(command.Kind, command.ContainerId, cancellationToken);
+                return await SaveAsync(CreateResult(
+                    command,
+                    mutation.Succeeded ? CommandExecutionState.Succeeded : CommandExecutionState.Failed,
+                    mutation.FailureCode,
+                    container.Revision));
+            }
+            catch (Exception exception) when (exception is not ArgumentException)
+            {
+                var result = CreateResult(
+                    command,
+                    CommandExecutionState.Indeterminate,
+                    "engine_result_unknown",
+                    container.Revision);
+                await journal.SaveResultAsync(result, CancellationToken.None);
+                return result;
+            }
         }
-        catch (Exception exception) when (exception is not ArgumentException)
+        finally
         {
-            var result = CreateResult(
-                command,
-                CommandExecutionState.Indeterminate,
-                "engine_result_unknown",
-                container.Revision);
-            await journal.SaveResultAsync(result, CancellationToken.None);
-            return result;
+            mutationLock.Release();
         }
 
         async Task<JournaledCommandResult> SaveAsync(JournaledCommandResult result)

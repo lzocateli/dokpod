@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <ProjectReference Include="../Dokpod.Agent.Contracts/Dokpod.Agent.Contracts.csproj" />
     <ProjectReference Include="../Dokpod.Domain/Dokpod.Domain.csproj" />
   </ItemGroup>
 </Project>

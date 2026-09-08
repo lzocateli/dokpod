@@ -57,6 +57,62 @@ public sealed class AgentCommandProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_SerializesMutationsForTheSameContainer()
+    {
+        var journal = new MemoryCommandJournal();
+        var engine = new FakeEngine
+        {
+            Container = CreateContainer("revision-01"),
+            BlockExecution = true,
+        };
+        var processor = CreateProcessor(journal, engine);
+        var first = processor.ProcessAsync(CreateCommand(), 8, TestContext.Current.CancellationToken);
+
+        await engine.ExecutionStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        var second = processor.ProcessAsync(
+            CreateCommand() with { CommandId = Guid.Parse("8bf6d9bc-e8c4-432e-8ba4-8443ab7ce533") },
+            8,
+            TestContext.Current.CancellationToken);
+
+        await Task.Yield();
+        Assert.Equal(1, engine.ExecutionCount);
+
+        engine.ReleaseExecution();
+        await Task.WhenAll(first, second);
+
+        Assert.Equal(2, engine.ExecutionCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_AllowsMutationsForDifferentEnvironmentsInParallel()
+    {
+        var journal = new MemoryCommandJournal();
+        var engine = new FakeEngine
+        {
+            Container = CreateContainer("revision-01"),
+            BlockExecution = true,
+        };
+        var processor = CreateProcessor(journal, engine);
+        var first = processor.ProcessAsync(CreateCommand(), 8, TestContext.Current.CancellationToken);
+
+        await engine.ExecutionStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        var second = processor.ProcessAsync(
+            CreateCommand() with
+            {
+                EnvironmentId = Guid.Parse("6fb83c37-7ba2-44e4-a485-00af4cd2f55d"),
+                CommandId = Guid.Parse("8bf6d9bc-e8c4-432e-8ba4-8443ab7ce533"),
+            },
+            8,
+            TestContext.Current.CancellationToken);
+
+        await engine.TwoExecutionsStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        engine.ReleaseExecution();
+        await Task.WhenAll(first, second);
+
+        Assert.Equal(2, engine.ExecutionCount);
+    }
+
+    [Fact]
     public async Task ProcessAsync_MarksUnknownEngineOutcomeAsIndeterminate()
     {
         var journal = new MemoryCommandJournal();
@@ -102,7 +158,12 @@ public sealed class AgentCommandProcessorTests
     {
         public EngineContainer? Container { get; init; }
         public Exception? ExecutionException { get; init; }
-        public int ExecutionCount { get; private set; }
+        public bool BlockExecution { get; init; }
+        private int executionCount;
+        public int ExecutionCount => executionCount;
+        public TaskCompletionSource ExecutionStarted { get; } = new();
+        public TaskCompletionSource TwoExecutionsStarted { get; } = new();
+        private TaskCompletionSource? ExecutionRelease { get; } = new();
 
         public Task<EngineDescriptor> InspectAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new EngineDescriptor("test", "1.47"));
@@ -118,11 +179,32 @@ public sealed class AgentCommandProcessorTests
             string containerId,
             CancellationToken cancellationToken)
         {
-            ExecutionCount++;
-            return ExecutionException is null
-                ? Task.FromResult(new ContainerMutationResult(true, null))
-                : Task.FromException<ContainerMutationResult>(ExecutionException);
+            var currentExecutionCount = Interlocked.Increment(ref executionCount);
+            ExecutionStarted.TrySetResult();
+            if (currentExecutionCount == 2)
+            {
+                TwoExecutionsStarted.TrySetResult();
+            }
+
+            return ExecuteCoreAsync();
+
+            async Task<ContainerMutationResult> ExecuteCoreAsync()
+            {
+                if (BlockExecution)
+                {
+                    await ExecutionRelease!.Task.WaitAsync(cancellationToken);
+                }
+
+                if (ExecutionException is not null)
+                {
+                    throw ExecutionException;
+                }
+
+                return new ContainerMutationResult(true, null);
+            }
         }
+
+        public void ReleaseExecution() => ExecutionRelease!.TrySetResult();
     }
 
     private sealed class MemoryCommandJournal : ICommandJournal
