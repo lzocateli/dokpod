@@ -1,0 +1,26 @@
+.shell__separator {
+	width: 1px;
+	height: 1.5rem;
+	background: var(--dok-color-border);
+}
+
+.shell__spacer {
+	flex: 1;
+}
+
+.shell__content {
+	width: min(100% - 2rem, var(--dok-content-max));
+	margin: 0 auto;
+	padding-block: var(--dok-space-7);
+}
+
+@media (max-width: 40rem) {
+	.dok-toolbar {
+		align-items: flex-start;
+		flex-wrap: wrap;
+	}
+
+	.shell__spacer {
+		display: none;
+	}
+}

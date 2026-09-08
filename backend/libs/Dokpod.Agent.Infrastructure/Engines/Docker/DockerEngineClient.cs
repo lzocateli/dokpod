@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.IO.Pipes;
 using System.Text.Json;
 using Dokpod.Agent.Application.Engines;
 using Dokpod.Domain.Commands;
@@ -37,6 +38,42 @@ public sealed class DockerEngineClient(HttpClient httpClient) : IContainerEngine
                 catch
                 {
                     socket.Dispose();
+                    throw;
+                }
+            },
+        };
+
+        return new HttpClient(handler)
+        {
+            BaseAddress = new Uri("http://docker/", UriKind.Absolute),
+            Timeout = timeout,
+        };
+    }
+
+    public static HttpClient CreateNamedPipeClient(string pipePath, TimeSpan timeout)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pipePath);
+        const string prefix = @"\\.\pipe\";
+        if (!pipePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || pipePath.Length == prefix.Length)
+        {
+            throw new ArgumentException(@"The Docker named pipe path must use \\.\pipe\<name>.", nameof(pipePath));
+        }
+
+        var pipeName = pipePath[prefix.Length..];
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            ConnectCallback = async (_, cancellationToken) =>
+            {
+                var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                try
+                {
+                    await pipe.ConnectAsync(cancellationToken);
+                    return pipe;
+                }
+                catch
+                {
+                    await pipe.DisposeAsync();
                     throw;
                 }
             },

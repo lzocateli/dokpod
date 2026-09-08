@@ -65,6 +65,7 @@ Não crie dependências circulares. Hosts compõem; bibliotecas implementam regr
 - Operações mutáveis usam ID idempotente, expiração, auditoria e reconciliação.
 - Não presuma equivalência entre Docker e Podman; anuncie e valide capabilities.
 - Não registre tokens, certificados privados, variáveis de ambiente, secrets ou logs integrais de containers.
+- Secrets locais usam exclusivamente `%APPDATA%\Microsoft\UserSecrets\dokpod\.env`; nunca crie, copie ou versione arquivo `.env` em qualquer diretório do repositório.
 - Exclusão de container não remove volume implicitamente.
 - Dependências externas exigem licença permissiva, gratuita, versão fixada e manutenção verificada.
 - Não adicione broker, cache distribuído, microsserviço ou novo datastore sem ADR e evidência operacional.

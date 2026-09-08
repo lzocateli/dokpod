@@ -2,6 +2,8 @@
   <Folder Name="/backend/" />
   <Folder Name="/backend/apps/">
     <Project Path="backend/apps/Dokpod.Agent/Dokpod.Agent.csproj" />
+    <Project Path="backend/apps/Dokpod.Bff/Dokpod.Bff.csproj" />
+    <Project Path="backend/apps/Dokpod.ControlPlane.Api/Dokpod.ControlPlane.Api.csproj" />
   </Folder>
   <Folder Name="/backend/libs/">
     <Project Path="backend/libs/Dokpod.Agent.Application/Dokpod.Agent.Application.csproj" />
@@ -11,9 +13,11 @@
     <Project Path="backend/libs/Dokpod.Domain/Dokpod.Domain.csproj" />
   </Folder>
   <Folder Name="/backend/tests/">
+    <Project Path="backend/tests/Dokpod.Architecture.Tests/Dokpod.Architecture.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.Agent.Application.Tests/Dokpod.Agent.Application.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.Agent.Infrastructure.Tests/Dokpod.Agent.Infrastructure.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.ControlPlane.Application.Tests/Dokpod.ControlPlane.Application.Tests.csproj" />
+    <Project Path="backend/tests/Dokpod.ControlPlane.Api.Tests/Dokpod.ControlPlane.Api.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.Domain.Tests/Dokpod.Domain.Tests.csproj" />
   </Folder>
 </Solution>

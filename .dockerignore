@@ -1,5 +1,16 @@
 .git
 .github
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/.env
+**/.env.*
+*.user
+*.suo
+image.png
+teste.md.git
+.github
 .vscode
 **/.env
 **/.env.*
@@ -10,3 +21,9 @@ frontend
 docs
 *.user
 *.suo
+!frontend/
+!frontend/web/
+!frontend/web/**
+!frontend/libs/
+!frontend/libs/design-system/
+!frontend/libs/design-system/**

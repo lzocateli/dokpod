@@ -1,0 +1,67 @@
+name: dokpod-keycloak-lab
+
+services:
+  postgres:
+    image: lzocateli/postgresql:18.4-pgvector0.8.6-bookworm
+    container_name: dokpod-keycloak-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${DOKPOD_KEYCLOAK_DB_PASSWORD:?Defina DOKPOD_KEYCLOAK_DB_PASSWORD em %APPDATA%\Microsoft\UserSecrets\dokpod\.env}
+      POSTGRES_DB: keycloak
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "postgresql-healthcheck"]
+      start_period: 30s
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    stop_grace_period: 30s
+    networks:
+      - keycloak-internal
+
+  keycloak:
+    image: lzocateli/keycloak:26.7.0
+    container_name: dokpod-keycloak
+    restart: unless-stopped
+    command:
+      - start-dev
+      - --import-realm
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${DOKPOD_KEYCLOAK_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${DOKPOD_KEYCLOAK_ADMIN_PASSWORD:?Defina DOKPOD_KEYCLOAK_ADMIN_PASSWORD em %APPDATA%\Microsoft\UserSecrets\dokpod\.env}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${DOKPOD_KEYCLOAK_DB_PASSWORD:?Defina DOKPOD_KEYCLOAK_DB_PASSWORD em %APPDATA%\Microsoft\UserSecrets\dokpod\.env}
+      KC_HOSTNAME: ${DOKPOD_KEYCLOAK_HOSTNAME:-http://keycloak:8080}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    volumes:
+      - ./realm:/opt/keycloak/data/import:ro
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          read -r status <&3 && [[ "$$status" == *" 200 "* ]]
+      start_period: 120s
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    stop_grace_period: 30s
+    mem_limit: 2g
+    networks:
+      - keycloak-internal
+
+networks:
+  keycloak-internal:

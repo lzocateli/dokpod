@@ -1,0 +1,103 @@
+{
+  "realm": "dokpod",
+  "displayName": "Dokpod",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "rememberMe": false,
+  "verifyEmail": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "minimumQuickLoginWaitSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "accessTokenLifespan": 300,
+  "accessCodeLifespan": 60,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "eventsListeners": ["jboss-logging"],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+  "clientScopes": [
+    {
+      "name": "environment:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "environment:manage",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "container:start",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "container:stop",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "container:restart",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "container:delete",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "audit:read",
+      "protocol": "openid-connect"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "dokpod-bff",
+      "name": "Dokpod BFF",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": ""
+      },
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "dokpod-api",
+      "name": "Dokpod API",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": true,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "dokpod-provisioner",
+      "name": "Dokpod Provisioner",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect"
+    }
+  ]
+}

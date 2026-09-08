@@ -1,11 +1,11 @@
 # Plano: MVP do Dokpod
 
-**Status:** proposed  
+**Status:** approved  
 **Data de criação:** 2026-09-06  
-**Última atualização:** 2026-09-06  
+**Última atualização:** 2026-09-07  
 **Responsáveis:** equipe Dokpod  
 **Origem:** IA assistida  
-**Revisor humano:** pendente  
+**Revisor humano:** Lincoln Zocateli  
 **Relacionado:** ADR 2026-0001
 
 ## Objetivo
@@ -47,7 +47,7 @@ Entregar um MVP self-hosted que registre agentes, mostre inventário e execute c
 ### P-01: Prova Docker Linux e transporte
 
 **Status:** in-progress  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** nenhuma
 
 **Objetivo:** eliminar as maiores incertezas antes do scaffolding definitivo.
@@ -72,7 +72,7 @@ Evidências:
 ### P-02: Fundação do monorepo e contratos
 
 **Status:** in-progress  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-01
 
 **Objetivo:** criar soluções .NET, workspace Angular, contratos e gates mínimos.
@@ -98,12 +98,22 @@ Evidências:
 - `build-backend-container`: build aprovado sem avisos ou erros;
 - `test-backend-container`: 21 testes aprovados;
 - Dockerfile multi-stage do agente e `.dockerignore` validados por build e smoke test;
-- hosts, OpenAPI, Angular, imagens finais, arquitetura completa e publicação Windows self-contained permanecem pendentes.
+- host gRPC inicial do plano de controle criado com certificado de cliente obrigatório e rejeição deny-by-default antes do cadastro de agentes;
+- imagem `dokpod/control-plane-api:dev` construída a partir de `deploy/api/Dockerfile` e smoke test de `/health/live` aprovado em filesystem read-only;
+- host BFF inicial e imagem `dokpod/bff:dev` criados, com build e smoke test de `/health/live` aprovados em filesystem read-only;
+- contrato OpenAPI 3.1 v1 criado para a API do browser, com recurso de ambientes, OAuth2/Keycloak, paginação limitada e erros `application/problem+json`;
+- workspace Angular 22 standalone e estrito criado em `frontend/web`, com shell operacional inicial e consumo do design system local;
+- `package-lock.json` criado com o toolchain Angular e dependências auditadas sem vulnerabilidades reportadas pelo npm;
+- imagem `dokpod/web:dev` construída a partir de `deploy/web/Dockerfile`, com build Angular multi-stage e runtime NGINX não root na porta `5000`; o Dockerfile usa `npm ci` para os builds seguintes;
+- script `deploy/agent/publish-windows.ps1` publicou o agente Release self-contained para `win-x64` no SDK containerizado, sem incluir identidade, configuração ou journal no pacote;
+- a execução direta do pacote `win-x64` nesta estação, sem `dotnet`, revelou que o agente usava indevidamente o default Unix `/run/docker.sock` no Windows; após selecionar o named pipe `\\.\pipe\docker_engine`, o pacote republicado conectou ao Docker local, negociou API `1.47`, inventariou 12 containers e encerrou corretamente em `RUN_ONCE`;
+- `Dokpod.Architecture.Tests`: 8 regras aprovadas, bloqueando dependências diretas proibidas entre domínio, aplicações, infraestrutura e hosts;
+- testes Angular, arquitetura completa e execução do pacote Windows em host limpo permanecem pendentes.
 
 ### P-03: Identidade e cadastro de ambientes
 
-**Status:** not-started  
-**Responsável:** não atribuído  
+**Status:** in-progress  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-02
 
 **Objetivo:** autenticar usuários e cadastrar agentes sem credenciais estáticas compartilhadas.
@@ -121,12 +131,14 @@ Validação:
 
 Evidências:
 
-- pendente.
+- laboratório isolado criado em `deploy/keycloak`, com PostgreSQL e Keycloak em redes internas, secrets somente por `.env` local, realm `dokpod`, clients `dokpod-bff`, `dokpod-api` e `dokpod-provisioner`, e scopes iniciais;
+- Compose e manifesto JSON do realm sem diagnósticos; PostgreSQL do laboratório atingiu estado saudável durante a validação;
+- bootstrap completo do Keycloak e discovery do realm permanecem pendentes, pois a execução e limpeza foram interrompidas pelo terminal.
 
 ### P-04: Inventário reconciliável
 
 **Status:** not-started  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-03
 
 **Objetivo:** mostrar estado confiável e idade dos dados por ambiente.
@@ -148,7 +160,7 @@ Evidências:
 ### P-05: Ciclo de vida de containers
 
 **Status:** not-started  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-04
 
 **Objetivo:** iniciar, parar, reiniciar e excluir containers com confirmação e auditoria.
@@ -170,7 +182,7 @@ Evidências:
 ### P-06: Hardening e release candidata
 
 **Status:** not-started  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-05
 
 **Objetivo:** produzir uma release candidata reproduzível e operável.
@@ -194,7 +206,7 @@ Evidências:
 ### P-07: Qualificar capabilities adicionais
 
 **Status:** not-started  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-01
 
 **Objetivo:** avaliar Podman Linux e o Worker Service em Docker Windows sem bloquear a entrega Docker Linux.

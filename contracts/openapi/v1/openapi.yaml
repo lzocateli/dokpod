@@ -1,0 +1,143 @@
+openapi: 3.1.0
+info:
+  title: Dokpod Control Plane API
+  version: 1.0.0
+  description: API HTTP versionada para o console administrativo do Dokpod.
+servers:
+  - url: /api/v1
+paths:
+  /environments:
+    get:
+      operationId: listEnvironments
+      summary: Lista os ambientes autorizados para o solicitante.
+      security:
+        - dokpodOAuth:
+            - environment:read
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Página de ambientes autorizados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/AuthorizationUnavailable'
+components:
+  securitySchemes:
+    dokpodOAuth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://keycloak.invalid/realms/dokpod/protocol/openid-connect/auth
+          tokenUrl: https://keycloak.invalid/realms/dokpod/protocol/openid-connect/token
+          scopes:
+            environment:read: Lista e consulta ambientes autorizados.
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 512
+      description: Cursor opaco da página anterior.
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+      description: Quantidade máxima de itens retornados.
+  responses:
+    Unauthorized:
+      description: Token ausente, inválido ou expirado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: A decisão de autorização negou o acesso ao recurso.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    AuthorizationUnavailable:
+      description: A decisão de autorização não pôde ser obtida; o acesso falhou fechado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+  schemas:
+    EnvironmentPage:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Environment'
+        nextCursor:
+          type:
+            - string
+            - 'null'
+          maxLength: 512
+          description: Cursor opaco para a próxima página, ou nulo no fim da coleção.
+    Environment:
+      type: object
+      required:
+        - id
+        - name
+        - connectionStatus
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador opaco do ambiente.
+          examples:
+            - 40a4b18b-16d4-479b-beba-6e922e2731d7
+        name:
+          type: string
+          maxLength: 128
+          examples:
+            - docker-laboratorio
+        connectionStatus:
+          type: string
+          enum:
+            - unknown
+            - connected
+            - disconnected
+          description: Estado observado mais recente da conexão do agente.
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        correlationId:
+          type: string
+          maxLength: 128

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../apps/Dokpod.Agent/Dokpod.Agent.csproj" />
+    <ProjectReference Include="../../apps/Dokpod.Bff/Dokpod.Bff.csproj" />
+    <ProjectReference Include="../../apps/Dokpod.ControlPlane.Api/Dokpod.ControlPlane.Api.csproj" />
+    <ProjectReference Include="../../libs/Dokpod.Agent.Application/Dokpod.Agent.Application.csproj" />
+    <ProjectReference Include="../../libs/Dokpod.Agent.Contracts/Dokpod.Agent.Contracts.csproj" />
+    <ProjectReference Include="../../libs/Dokpod.Agent.Infrastructure/Dokpod.Agent.Infrastructure.csproj" />
+    <ProjectReference Include="../../libs/Dokpod.ControlPlane.Application/Dokpod.ControlPlane.Application.csproj" />
+    <ProjectReference Include="../../libs/Dokpod.Domain/Dokpod.Domain.csproj" />
+  </ItemGroup>
+</Project>
