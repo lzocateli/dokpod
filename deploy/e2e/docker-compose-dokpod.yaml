@@ -1,0 +1,75 @@
+name: dokpod
+
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: frontend/web/Dockerfile
+    image: dokpod-web:e2e
+    restart: "no"
+    stop_grace_period: 10s
+    networks:
+      dokpod:
+        ipv4_address: 172.32.0.10
+        aliases:
+          - dokpod-web
+      altivy-edge:
+        aliases:
+          - dokpod-web
+
+  api:
+    build:
+      context: ../..
+      dockerfile: backend/apps/Dokpod.ControlPlane.Api/Dockerfile
+    image: dokpod-api:e2e
+    user: "0:0"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DOKPOD_API_GRPC_PORT: 7443
+      DOKPOD_API_HEALTH_PORT: 8080
+      DOKPOD_API_CERTIFICATE_PATH: /certs/api.pfx
+      DOKPOD_API_CERTIFICATE_PASSWORD: ${DOKPOD_E2E_API_CERTIFICATE_PASSWORD:-}
+      DOKPOD_AGENT_CERTIFICATE_FINGERPRINT: ${DOKPOD_E2E_AGENT_CERTIFICATE_FINGERPRINT:-}
+      DOKPOD_AGENT_ENVIRONMENT_ID: ${DOKPOD_E2E_AGENT_ENVIRONMENT_ID:-}
+    volumes:
+      - ${DOKPOD_E2E_API_CERTIFICATE_PATH:?Defina o caminho absoluto do certificado PFX da API}:/certs/api.pfx:ro
+    restart: "no"
+    stop_grace_period: 20s
+    networks:
+      dokpod:
+        ipv4_address: 172.32.0.20
+        aliases:
+          - dokpod-api
+      altivy-edge:
+        aliases:
+          - dokpod-api
+
+  agent:
+    build:
+      context: ../..
+      dockerfile: deploy/agent/Dockerfile
+    image: dokpod-agent:e2e
+    profiles:
+      - agent
+    group_add:
+      - "0"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/lib/dokpod-agent:rw,noexec,nosuid,size=16m,uid=1654,gid=1654,mode=0700
+    volumes:
+      - /var/run/docker.sock:/run/docker.sock
+    environment:
+      DOKPOD_AGENT_RUN_ONCE: "true"
+      DOKPOD_AGENT_DATA_DIRECTORY: /var/lib/dokpod-agent
+      DOKPOD_AGENT_DOCKER_SOCKET: /run/docker.sock
+    restart: "no"
+
+networks:
+  dokpod:
+    ipam:
+      config:
+        - subnet: 172.32.0.0/24
+  altivy-edge:
+    external: true
+    name: altivy-edge

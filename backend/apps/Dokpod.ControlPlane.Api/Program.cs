@@ -14,9 +14,17 @@ var certificate = X509CertificateLoader.LoadPkcs12FromFile(certificatePath, cert
 var port = int.TryParse(Environment.GetEnvironmentVariable("DOKPOD_API_GRPC_PORT"), out var configuredPort)
     ? configuredPort
     : 7443;
+var healthPort = int.TryParse(Environment.GetEnvironmentVariable("DOKPOD_API_HEALTH_PORT"), out var configuredHealthPort)
+    ? configuredHealthPort
+    : 8080;
 
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
+    serverOptions.ListenAnyIP(healthPort, listenOptions =>
+    {
+        listenOptions.Protocols = HttpProtocols.Http1;
+    });
+
     serverOptions.ListenAnyIP(port, listenOptions =>
     {
         listenOptions.Protocols = HttpProtocols.Http2;
