@@ -2,6 +2,7 @@
   <Folder Name="/backend/" />
   <Folder Name="/backend/apps/">
     <Project Path="backend/apps/Dokpod.Agent/Dokpod.Agent.csproj" />
+    <Project Path="backend/apps/Dokpod.ControlPlane.Api/Dokpod.ControlPlane.Api.csproj" />
   </Folder>
   <Folder Name="/backend/libs/">
     <Project Path="backend/libs/Dokpod.Agent.Application/Dokpod.Agent.Application.csproj" />

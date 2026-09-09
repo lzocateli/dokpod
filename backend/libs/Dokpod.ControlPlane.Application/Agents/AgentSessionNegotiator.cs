@@ -18,6 +18,8 @@ public interface IAgentIdentityRegistry
 public interface IAgentSessionStore
 {
     ValueTask<AgentSession> ActivateAsync(Guid environmentId, CancellationToken cancellationToken);
+
+    bool IsActive(AgentSession session);
 }
 
 public sealed class AgentSessionNegotiator(

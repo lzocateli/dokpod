@@ -1,11 +1,11 @@
 # Plano: MVP do Dokpod
 
-**Status:** proposed  
+**Status:** approved  
 **Data de criação:** 2026-09-06  
 **Última atualização:** 2026-09-08
 **Responsáveis:** equipe Dokpod  
 **Origem:** IA assistida  
-**Revisor humano:** pendente  
+**Revisor humano:** Lincoln Zocateli  
 **Relacionado:** ADR 2026-0001
 
 ## Objetivo
@@ -47,7 +47,7 @@ Entregar um MVP self-hosted que registre agentes, mostre inventário e execute c
 ### P-01: Prova Docker Linux e transporte
 
 **Status:** in-progress  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** nenhuma
 
 **Objetivo:** eliminar as maiores incertezas antes do scaffolding definitivo.
@@ -68,12 +68,14 @@ Evidências:
 - comandos do protocolo são convertidos para o domínio somente após validar ambiente, fencing token, UUID, ID imutável do container, revisão, hash SHA-256 e deadline; entradas malformadas são rejeitadas antes de alcançar o engine;
 - `build-agent-image` e `smoke-agent-image`: imagem Linux construída e executada como usuário não root, filesystem read-only e acesso ao socket somente por grupo suplementar;
 - certificados sem EKU de cliente e versões de protocolo incompatíveis são rejeitados antes da ativação da sessão;
+- host gRPC configurado com listener HTTPS/HTTP2 explícito, certificado de cliente obrigatório e revogação de cadeia habilitada;
+- cliente gRPC exige endpoint HTTPS e apresenta certificado de cliente por `HttpClientHandler`; sessões ativas são indexadas por ambiente e fencing é verificado no stream;
 - Kestrel com cadeia/revogação mTLS, cliente gRPC do agente, perda de resposta e reconexão permanecem pendentes.
 
 ### P-02: Fundação do monorepo e contratos
 
 **Status:** in-progress  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-01
 
 **Objetivo:** criar soluções .NET, workspace Angular, contratos e gates mínimos.
@@ -104,7 +106,7 @@ Evidências:
 ### P-03: Identidade e cadastro de ambientes
 
 **Status:** not-started  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-02
 
 **Objetivo:** autenticar usuários e cadastrar agentes sem credenciais estáticas compartilhadas.
@@ -127,7 +129,7 @@ Evidências:
 ### P-04: Inventário reconciliável
 
 **Status:** not-started  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-03
 
 **Objetivo:** mostrar estado confiável e idade dos dados por ambiente.
@@ -149,7 +151,7 @@ Evidências:
 ### P-05: Ciclo de vida de containers
 
 **Status:** not-started  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-04
 
 **Objetivo:** iniciar, parar, reiniciar e excluir containers com confirmação e auditoria.
@@ -171,7 +173,7 @@ Evidências:
 ### P-06: Hardening e release candidata
 
 **Status:** not-started  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-05
 
 **Objetivo:** produzir uma release candidata reproduzível e operável.
@@ -195,7 +197,7 @@ Evidências:
 ### P-07: Qualificar capabilities adicionais
 
 **Status:** not-started  
-**Responsável:** não atribuído  
+**Responsável:** Lincoln Zocateli  
 **Dependências:** P-01
 
 **Objetivo:** avaliar Podman Linux e o Worker Service em Docker Windows sem bloquear a entrega Docker Linux.
@@ -244,3 +246,4 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-07 | P-01 | not-started | in-progress | adapter Docker real e núcleo de journal iniciados; provas restantes pendentes | IA assistida |
 | 2026-09-07 | P-02 | not-started | in-progress | solução, dependências centralizadas e contrato v1 compilável criados | IA assistida |
 | 2026-09-08 | P-01 | in-progress | in-progress | serialização por ambiente/alvo e validação do mapeamento Protobuf para domínio comprovadas por 28 testes backend | IA assistida |
+| 2026-09-08 | P-01 | in-progress | in-progress | host HTTPS/HTTP2, cliente gRPC com certificado e fencing por ambiente compilados; handshake end-to-end, revogação ativa, perda de resposta e reconexão permanecem pendentes | IA assistida |

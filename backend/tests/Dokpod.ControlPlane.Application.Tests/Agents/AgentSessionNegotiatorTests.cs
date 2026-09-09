@@ -103,5 +103,7 @@ public sealed class AgentSessionNegotiatorTests
 
         public ValueTask<AgentSession> ActivateAsync(Guid environmentId, CancellationToken cancellationToken) =>
             ValueTask.FromResult(new AgentSession(environmentId, Guid.NewGuid(), ++fencingToken));
+
+        public bool IsActive(AgentSession session) => true;
     }
 }

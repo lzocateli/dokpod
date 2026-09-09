@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../Dokpod.Agent.Application/Dokpod.Agent.Application.csproj" />
     <ProjectReference Include="../Dokpod.Domain/Dokpod.Domain.csproj" />
   </ItemGroup>

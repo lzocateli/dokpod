@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>Dokpod.ControlPlane.Api</AssemblyName>
+    <RootNamespace>Dokpod.ControlPlane.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../libs/Dokpod.Agent.Contracts/Dokpod.Agent.Contracts.csproj" />
+    <ProjectReference Include="../../libs/Dokpod.ControlPlane.Application/Dokpod.ControlPlane.Application.csproj" />
+  </ItemGroup>
+</Project>
