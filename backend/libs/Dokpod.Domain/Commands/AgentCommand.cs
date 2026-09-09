@@ -52,23 +52,23 @@ public sealed record JournaledCommandResult(
 
 public interface ICommandJournal
 {
-    ValueTask<JournaledCommand?> AppendIfAbsentAsync(
+    Task<JournaledCommand?> AppendIfAbsentAsync(
         JournaledCommand command,
         CancellationToken cancellationToken);
 
-    ValueTask<JournaledCommandResult?> FindResultAsync(
+    Task<JournaledCommandResult?> FindResultAsync(
         Guid environmentId,
         Guid commandId,
         CancellationToken cancellationToken);
 
-    ValueTask SaveResultAsync(
+    Task SaveResultAsync(
         JournaledCommandResult result,
         CancellationToken cancellationToken);
 }
 
 public sealed class AgentCommandGate(ICommandJournal journal, TimeProvider timeProvider)
 {
-    public async ValueTask<CommandAdmission> AdmitAsync(
+    public async Task<CommandAdmission> AdmitAsync(
         AgentCommand command,
         long activeFencingToken,
         CancellationToken cancellationToken)

@@ -28,8 +28,8 @@ public sealed class AgentCommandGateTests
         var command = CreateCommand(payloadHash: "sha256:abc", fencingToken: 8);
 
         var results = await Task.WhenAll(
-            gate.AdmitAsync(command, activeFencingToken: 8, TestContext.Current.CancellationToken).AsTask(),
-            gate.AdmitAsync(command, activeFencingToken: 8, TestContext.Current.CancellationToken).AsTask());
+            gate.AdmitAsync(command, activeFencingToken: 8, TestContext.Current.CancellationToken),
+            gate.AdmitAsync(command, activeFencingToken: 8, TestContext.Current.CancellationToken));
 
         Assert.Equal(1, results.Count(result => result == CommandAdmission.Accepted));
         Assert.Equal(1, results.Count(result => result == CommandAdmission.Duplicate));
@@ -102,7 +102,7 @@ public sealed class AgentCommandGateTests
         private readonly Dictionary<(Guid EnvironmentId, Guid CommandId), JournaledCommand> commands = [];
         private readonly Dictionary<(Guid EnvironmentId, Guid CommandId), JournaledCommandResult> results = [];
 
-        public ValueTask<JournaledCommand?> AppendIfAbsentAsync(
+        public Task<JournaledCommand?> AppendIfAbsentAsync(
             JournaledCommand command,
             CancellationToken cancellationToken)
         {
@@ -113,15 +113,15 @@ public sealed class AgentCommandGateTests
                 var key = (command.EnvironmentId, command.CommandId);
                 if (commands.TryGetValue(key, out var existing))
                 {
-                    return ValueTask.FromResult<JournaledCommand?>(existing);
+                    return Task.FromResult<JournaledCommand?>(existing);
                 }
 
                 commands.Add(key, command);
-                return ValueTask.FromResult<JournaledCommand?>(null);
+                return Task.FromResult<JournaledCommand?>(null);
             }
         }
 
-        public ValueTask<JournaledCommandResult?> FindResultAsync(
+        public Task<JournaledCommandResult?> FindResultAsync(
             Guid environmentId,
             Guid commandId,
             CancellationToken cancellationToken)
@@ -130,17 +130,17 @@ public sealed class AgentCommandGateTests
             lock (sync)
             {
                 results.TryGetValue((environmentId, commandId), out var result);
-                return ValueTask.FromResult(result);
+                return Task.FromResult(result);
             }
         }
 
-        public ValueTask SaveResultAsync(JournaledCommandResult result, CancellationToken cancellationToken)
+        public Task SaveResultAsync(JournaledCommandResult result, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             lock (sync)
             {
                 results[(result.EnvironmentId, result.CommandId)] = result;
-                return ValueTask.CompletedTask;
+                return Task.CompletedTask;
             }
         }
     }

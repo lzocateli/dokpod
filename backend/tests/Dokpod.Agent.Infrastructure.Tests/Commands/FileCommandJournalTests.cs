@@ -30,8 +30,8 @@ public sealed class FileCommandJournalTests : IDisposable
         var secondJournal = new FileCommandJournal(dataDirectory);
 
         var results = await Task.WhenAll(
-            firstJournal.AppendIfAbsentAsync(command, TestContext.Current.CancellationToken).AsTask(),
-            secondJournal.AppendIfAbsentAsync(command, TestContext.Current.CancellationToken).AsTask());
+            firstJournal.AppendIfAbsentAsync(command, TestContext.Current.CancellationToken),
+            secondJournal.AppendIfAbsentAsync(command, TestContext.Current.CancellationToken));
 
         Assert.Equal(1, results.Count(result => result is null));
         Assert.Equal(1, results.Count(result => result == command));

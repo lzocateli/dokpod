@@ -21,7 +21,7 @@ public sealed class FileCommandJournal : ICommandJournal
         resultDirectory = Path.Combine(Path.GetFullPath(dataDirectory), "results");
     }
 
-    public async ValueTask<JournaledCommandResult?> FindResultAsync(
+    public async Task<JournaledCommandResult?> FindResultAsync(
         Guid environmentId,
         Guid commandId,
         CancellationToken cancellationToken)
@@ -32,7 +32,7 @@ public sealed class FileCommandJournal : ICommandJournal
             : null;
     }
 
-    public async ValueTask SaveResultAsync(
+    public async Task SaveResultAsync(
         JournaledCommandResult result,
         CancellationToken cancellationToken)
     {
@@ -52,7 +52,7 @@ public sealed class FileCommandJournal : ICommandJournal
         }
     }
 
-    public async ValueTask<JournaledCommand?> AppendIfAbsentAsync(
+    public async Task<JournaledCommand?> AppendIfAbsentAsync(
         JournaledCommand command,
         CancellationToken cancellationToken)
     {

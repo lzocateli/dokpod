@@ -212,33 +212,33 @@ public sealed class AgentCommandProcessorTests
         private readonly Dictionary<(Guid, Guid), JournaledCommand> commands = [];
         private readonly Dictionary<(Guid, Guid), JournaledCommandResult> results = [];
 
-        public ValueTask<JournaledCommand?> AppendIfAbsentAsync(
+        public Task<JournaledCommand?> AppendIfAbsentAsync(
             JournaledCommand command,
             CancellationToken cancellationToken)
         {
             var key = (command.EnvironmentId, command.CommandId);
             if (commands.TryGetValue(key, out var existing))
             {
-                return ValueTask.FromResult<JournaledCommand?>(existing);
+                return Task.FromResult<JournaledCommand?>(existing);
             }
 
             commands.Add(key, command);
-            return ValueTask.FromResult<JournaledCommand?>(null);
+            return Task.FromResult<JournaledCommand?>(null);
         }
 
-        public ValueTask<JournaledCommandResult?> FindResultAsync(
+        public Task<JournaledCommandResult?> FindResultAsync(
             Guid environmentId,
             Guid commandId,
             CancellationToken cancellationToken)
         {
             results.TryGetValue((environmentId, commandId), out var result);
-            return ValueTask.FromResult(result);
+            return Task.FromResult(result);
         }
 
-        public ValueTask SaveResultAsync(JournaledCommandResult result, CancellationToken cancellationToken)
+        public Task SaveResultAsync(JournaledCommandResult result, CancellationToken cancellationToken)
         {
             results[(result.EnvironmentId, result.CommandId)] = result;
-            return ValueTask.CompletedTask;
+            return Task.CompletedTask;
         }
     }
 }

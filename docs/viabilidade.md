@@ -1,16 +1,12 @@
 # Viabilidade técnica do Dokpod
 
-**Status:** arquitetura aceita; implementação condicionada às provas técnicas  
-**Data:** 2026-09-06  
+**Status:** arquitetura aceita; implementação condicionada às provas técnicas
+**Data:** 2026-09-06
 **Escopo:** plano de controle containerizado, agente Linux em container e agente Windows self-contained para Docker e Podman
-
-## Parecer executivo
 
 O Dokpod é tecnicamente viável com backend, BFF, API e agente em C#/.NET 10 e frontend em Angular 22. O .NET 10 é uma versão LTS ativa até novembro de 2028 e oferece os recursos necessários para HTTP, HTTP/2, gRPC, TLS mútuo, criptografia, serviços em segundo plano, observabilidade, concorrência assíncrona, containers Linux e Worker Services self-contained no Windows.
 
-A linguagem não é o principal risco. Os riscos determinantes são o nível de privilégio necessário para acessar os engines, a diferença operacional entre Docker e Podman, o transporte seguro entre agentes e plano de controle e o ciclo de instalação, atualização e proteção do Worker Service no Windows.
-
-**Recomendação:** prosseguir com um MVP, condicionado a provas técnicas antecipadas para acesso ao Docker por named pipe em Windows Server, Podman rootless em Linux e reconexão segura do agente atrás de NAT/firewall.
+A linguagem não é o principal risco. Os riscos determinantes são o nível de privilégio necessário para acessar os engines, a diferença operacional entre Docker e Podman, o transporte seguro entre agentes e plano de controle e o ciclo de instalação, atualização e proteção do Worker Service no Windows. Este documento reúne a arquitetura, os riscos e as provas técnicas obrigatórias exigidas pelo [ADR 2026-0001](adr/2026-0001-arquitetura-inicial.md) e usadas como critério de validação pelo [plano do MVP](plan/mvp.md).
 
 ## Problema e proposta
 

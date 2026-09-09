@@ -54,6 +54,25 @@ public sealed class AgentSessionNegotiatorTests
         Assert.Equal("protocol_version_unsupported", exception.FailureCode);
     }
 
+    [Fact]
+    public async Task NegotiateAsync_RejectsUnknownHelloEnums()
+    {
+        using var certificate = CreateCertificate(includeClientAuthenticationEku: true);
+        var negotiator = new AgentSessionNegotiator(
+            new FakeIdentityRegistry(null),
+            new FakeSessionStore());
+        var hello = CreateHello("1");
+        hello.Engine = (EngineKind)99;
+        hello.Capabilities.Add((Capability)99);
+
+        var exception = await Assert.ThrowsAsync<AgentSessionRejectedException>(() => negotiator.NegotiateAsync(
+            certificate,
+            hello,
+            TestContext.Current.CancellationToken).AsTask());
+
+        Assert.Equal("agent_hello_invalid", exception.FailureCode);
+    }
+
     private static AgentHello CreateHello(string protocolVersion)
     {
         var hello = new AgentHello
@@ -105,5 +124,11 @@ public sealed class AgentSessionNegotiatorTests
             ValueTask.FromResult(new AgentSession(environmentId, Guid.NewGuid(), ++fencingToken));
 
         public bool IsActive(AgentSession session) => true;
+
+        public Task WaitUntilInactiveAsync(AgentSession session, CancellationToken cancellationToken) =>
+            Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+
+        public ValueTask DeactivateAsync(AgentSession session, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
     }
 }
