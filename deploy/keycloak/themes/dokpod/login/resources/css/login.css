@@ -1,0 +1,281 @@
+:root {
+    --dokpod-font-display: Georgia, "Times New Roman", serif;
+    --dokpod-font-body: Consolas, "Courier New", monospace;
+    --dokpod-ink: #0b1210;
+    --dokpod-panel: #ffffff;
+    --dokpod-surface: #eef3ef;
+    --dokpod-border: #52635f;
+    --dokpod-muted: #52635f;
+    --dokpod-accent: #2f780f;
+    --dokpod-accent-hover: #235b0b;
+    --dokpod-error: #b42318;
+    --dokpod-focus: #2f780f;
+    --dokpod-shadow: 0 4px 0 rgba(11, 18, 16, 0.22);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    min-height: 100%;
+}
+
+body {
+    background:
+        linear-gradient(90deg, rgba(82, 99, 95, 0.14) 1px, transparent 1px) 0 0 / 2.5rem 2.5rem,
+        linear-gradient(rgba(82, 99, 95, 0.14) 1px, transparent 1px) 0 0 / 2.5rem 2.5rem,
+        var(--dokpod-surface);
+    color: var(--dokpod-ink);
+    font-family: var(--dokpod-font-body);
+    letter-spacing: 0;
+}
+
+.login-pf-page,
+.pf-v5-c-login {
+    min-height: 100vh;
+    background: transparent;
+}
+
+.pf-v5-c-login__container {
+    display: grid;
+    grid-template-areas:
+        "header"
+        "main";
+    grid-template-columns: minmax(0, 31.25rem);
+    align-items: center;
+    align-content: center;
+    justify-content: center;
+    gap: 1.25rem;
+    width: min(100%, 33.25rem);
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+#kc-header {
+    grid-area: header;
+    width: 18rem;
+    margin: 0 auto;
+}
+
+#kc-header-wrapper {
+    width: 100%;
+    min-height: 5.25rem;
+    margin: 0;
+    padding: 5.25rem 0 0;
+    color: transparent;
+    background: url("../img/logo.svg") center top / contain no-repeat;
+}
+
+.pf-v5-c-login__main,
+.card-pf,
+#kc-content {
+    grid-area: main;
+    align-self: center;
+    width: 100%;
+    max-width: 31.25rem;
+    margin: 0 auto;
+}
+
+.pf-v5-c-login__main,
+.card-pf {
+    padding: 2rem;
+    border: 1px solid var(--dokpod-border);
+    border-radius: 4px;
+    background: var(--dokpod-panel);
+    box-shadow: var(--dokpod-shadow);
+}
+
+#kc-page-title {
+    color: var(--dokpod-ink);
+    font-family: var(--dokpod-font-display);
+    font-size: 1.875rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.1;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.pf-c-form-control,
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+    min-height: 2.75rem;
+    border: 1px solid var(--dokpod-border);
+    border-radius: 2px;
+    color: var(--dokpod-ink);
+    background: var(--dokpod-panel);
+    font: inherit;
+}
+
+.pf-c-form-control:focus,
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+a:focus,
+button:focus {
+    border-color: var(--dokpod-focus);
+    outline: 2px solid var(--dokpod-focus);
+    outline-offset: 2px;
+}
+
+.pf-c-button.pf-m-primary,
+input[type="submit"] {
+    min-height: 2.75rem;
+    border: 1px solid var(--dokpod-accent);
+    border-radius: 2px;
+    background: var(--dokpod-accent);
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.pf-c-button.pf-m-primary:hover,
+input[type="submit"]:hover {
+    border-color: var(--dokpod-accent-hover);
+    background: var(--dokpod-accent-hover);
+}
+
+a {
+    color: var(--dokpod-accent-hover);
+    font-weight: 700;
+}
+
+.alert-error,
+.pf-m-danger {
+    border-left: 4px solid var(--dokpod-error);
+}
+
+@media (max-width: 48rem) {
+    .login-pf-page {
+        padding: 1rem 0.75rem;
+    }
+
+    .pf-v5-c-login__container {
+        padding: 1rem 0.75rem;
+    }
+
+    #kc-header {
+        width: 15rem;
+        margin: 0 auto;
+    }
+
+    .pf-v5-c-login__main,
+    .card-pf {
+        padding: 1.25rem;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --dokpod-ink: #f4f7f5;
+        --dokpod-panel: #15201d;
+        --dokpod-surface: #0b1210;
+        --dokpod-border: #52635f;
+        --dokpod-muted: #a9b5b1;
+        --dokpod-accent: #b7f34a;
+        --dokpod-accent-hover: #d7ff86;
+        --dokpod-focus: #b7f34a;
+        --dokpod-shadow: 0 4px 0 rgba(0, 0, 0, 1);
+    }
+
+    #kc-header-wrapper {
+        background-image: url("../img/logo-dark.svg");
+    }
+
+    .pf-c-form-control,
+    input[type="text"],
+    input[type="password"],
+    input[type="email"] {
+        color: var(--dokpod-ink);
+        background: #23312d;
+    }
+
+    .pf-c-button.pf-m-primary,
+    input[type="submit"] {
+        color: #0b1210;
+    }
+}
+
+html[data-dokpod-theme="dark"] {
+    --dokpod-ink: #f4f7f5;
+    --dokpod-panel: #15201d;
+    --dokpod-surface: #0b1210;
+    --dokpod-border: #52635f;
+    --dokpod-muted: #a9b5b1;
+    --dokpod-accent: #b7f34a;
+    --dokpod-accent-hover: #d7ff86;
+    --dokpod-focus: #b7f34a;
+    --dokpod-shadow: 0 4px 0 rgba(0, 0, 0, 1);
+}
+
+html[data-dokpod-theme="dark"] #kc-header-wrapper {
+    background-image: url("../img/logo-dark.svg");
+}
+
+html[data-dokpod-theme="dark"] .pf-c-form-control,
+html[data-dokpod-theme="dark"] input[type="text"],
+html[data-dokpod-theme="dark"] input[type="password"],
+html[data-dokpod-theme="dark"] input[type="email"] {
+    color: var(--dokpod-ink);
+    background: #23312d;
+}
+
+html[data-dokpod-theme="dark"] .pf-c-button.pf-m-primary,
+html[data-dokpod-theme="dark"] input[type="submit"] {
+    color: #0b1210;
+}
+
+html[data-dokpod-theme="light"] {
+    --dokpod-ink: #0b1210;
+    --dokpod-panel: #ffffff;
+    --dokpod-surface: #eef3ef;
+    --dokpod-border: #52635f;
+    --dokpod-muted: #52635f;
+    --dokpod-accent: #2f780f;
+    --dokpod-accent-hover: #235b0b;
+    --dokpod-focus: #2f780f;
+    --dokpod-shadow: 0 4px 0 rgba(11, 18, 16, 0.22);
+}
+
+html[data-dokpod-theme="light"] #kc-header-wrapper {
+    background-image: url("../img/logo.svg");
+}
+
+html[data-dokpod-theme="light"] .pf-c-form-control,
+html[data-dokpod-theme="light"] input[type="text"],
+html[data-dokpod-theme="light"] input[type="password"],
+html[data-dokpod-theme="light"] input[type="email"] {
+    color: var(--dokpod-ink);
+    background: var(--dokpod-panel);
+}
+
+html[data-dokpod-theme="light"] .pf-c-button.pf-m-primary,
+html[data-dokpod-theme="light"] input[type="submit"] {
+    color: #ffffff;
+}
+
+.dokpod-theme-toggle {
+    display: block;
+    min-height: 2.25rem;
+    margin: 0 auto 1rem;
+    padding: 0 0.875rem;
+    border: 1px solid var(--dokpod-border);
+    border-radius: 2px;
+    background: var(--dokpod-panel);
+    color: var(--dokpod-ink);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.dokpod-theme-toggle:focus {
+    border-color: var(--dokpod-focus);
+    outline: 2px solid var(--dokpod-focus);
+    outline-offset: 2px;
+}

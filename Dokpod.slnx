@@ -15,6 +15,7 @@
     <Project Path="backend/tests/Dokpod.Agent.Application.Tests/Dokpod.Agent.Application.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.Agent.Infrastructure.Tests/Dokpod.Agent.Infrastructure.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.ControlPlane.Application.Tests/Dokpod.ControlPlane.Application.Tests.csproj" />
+    <Project Path="backend/tests/Dokpod.ControlPlane.Api.Tests/Dokpod.ControlPlane.Api.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.Domain.Tests/Dokpod.Domain.Tests.csproj" />
   </Folder>
 </Solution>

@@ -2,9 +2,11 @@
 
 ## Estado
 
-Este documento define o contrato de identidade e autorização do Dokpod. Os manifests e valores exatos serão criados durante o scaffolding e validados em laboratório antes de produção.
+Este documento define o contrato de identidade e autorização do Dokpod. Os manifests iniciais de laboratório estão versionados em `deploy/keycloak`, e a reconciliação idempotente do realm é feita por `tools/scripts/configure-keycloak.ps1`.
 
 Keycloak é uma dependência externa obrigatória. O baseline containerizado usa `lzocateli/keycloak:26.7.0`, fixada também por digest em cada release. O Dokpod não possui fallback de usuário local nem modo que ignore autorização quando o Keycloak estiver indisponível.
+
+Em desenvolvimento local, o Dokpod pode usar a mesma instância administrativa de Keycloak/PostgreSQL usada pelos produtos Altivy. Essa instância compartilhada hospeda realms separados; o Dokpod usa sempre o realm `dokpod`, nunca o realm `master` como realm de aplicação.
 
 ## Topologia
 
@@ -41,6 +43,8 @@ Nunca use o realm `master` para a aplicação. O baseline usa:
 | Resource server | `dokpod-api` | audience, recursos, scopes e políticas |
 | Client de serviço | `dokpod-provisioner` | registrar e reconciliar recursos com menor privilégio |
 | Audience | `dokpod-api` | destinatário obrigatório do token da API |
+
+O laboratório também declara o client público `dokpod-lab` para validar a tela de login customizada e o client `dokpod-authorization-spike` para provas locais de autorização com PKCE.
 
 O client `dokpod-bff` habilita somente redirects e post-logout redirects exatos da origem implantada. Wildcards amplos, Direct Access Grants, Implicit Flow e Offline Access permanecem desabilitados sem ADR específico.
 
@@ -124,4 +128,4 @@ Nenhum token de usuário é encaminhado ao agente.
 
 O deployment deve incluir health/readiness do Keycloak sem transformar indisponibilidade em bypass. Backups do banco do Keycloak e do banco do Dokpod são independentes e ambos precisam de testes de restauração. Atualizações seguem release notes, compatibilidade, migration, rollback, scan de vulnerabilidades e teste dos fluxos autenticados.
 
-Valores de sessão, tokens e URLs serão fixados com evidência do ambiente de implantação. Atualizações da imagem seguem a matriz e os gates definidos em [Distribuição e operação](distribuicao.md#imagens-base-e-toolchains).
+Para o laboratório local, consulte [deploy/keycloak/README.md](../deploy/keycloak/README.md). Valores de sessão, tokens e URLs de produção serão fixados com evidência do ambiente de implantação. Atualizações da imagem seguem a matriz e os gates definidos em [Distribuição e operação](distribuicao.md#imagens-base-e-toolchains).

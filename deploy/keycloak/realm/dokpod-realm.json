@@ -1,0 +1,187 @@
+{
+  "realm": "dokpod",
+  "displayName": "Dokpod",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": false,
+  "rememberMe": false,
+  "verifyEmail": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "minimumQuickLoginWaitSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "passwordPolicy": "length(14) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5)",
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "clientSessionIdleTimeout": 900,
+  "clientSessionMaxLifespan": 28800,
+  "accessTokenLifespan": 300,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanLogin": 300,
+  "accessCodeLifespanUserAction": 300,
+  "actionTokenGeneratedByAdminLifespan": 43200,
+  "revokeRefreshToken": false,
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "eventsListeners": [
+    "jboss-logging"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+  "loginTheme": "dokpod",
+  "roles": {
+    "client": {
+      "dokpod-api": [
+        {
+          "name": "Administrator",
+          "description": "Administra ambientes, auditoria e recursos Dokpod explicitamente autorizados."
+        },
+        {
+          "name": "Operator",
+          "description": "Le ambientes e opera containers Dokpod explicitamente autorizados."
+        },
+        {
+          "name": "Auditor",
+          "description": "Consulta auditoria Dokpod explicitamente autorizada."
+        },
+        {
+          "name": "Reader",
+          "description": "Le ambientes e containers Dokpod explicitamente autorizados."
+        }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "dokpod-lab",
+      "name": "Dokpod Lab",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "oauth2.device.authorization.grant.enabled": "false"
+      },
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "dokpod-api",
+      "name": "Dokpod API",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": true,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "dokpod-provisioner",
+      "name": "Dokpod Provisioner",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "dokpod-authorization-spike",
+      "name": "Dokpod Authorization Spike",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://127.0.0.1:8765/callback/"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "oauth2.device.authorization.grant.enabled": "false"
+      },
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "dokpod-bff",
+      "name": "Dokpod BFF",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://localhost:7443",
+      "baseUrl": "https://localhost:7443/",
+      "redirectUris": [
+        "https://localhost:7443/signin-oidc"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "https://localhost:7443/signout-callback-oidc",
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocol": "openid-connect"
+    }
+  ],
+  "groups": [
+    {
+      "name": "dokpod",
+      "subGroups": [
+        {
+          "name": "administrators",
+          "clientRoles": {
+            "dokpod-api": [
+              "Administrator"
+            ]
+          }
+        },
+        {
+          "name": "operators",
+          "clientRoles": {
+            "dokpod-api": [
+              "Operator"
+            ]
+          }
+        },
+        {
+          "name": "auditors",
+          "clientRoles": {
+            "dokpod-api": [
+              "Auditor"
+            ]
+          }
+        },
+        {
+          "name": "readers",
+          "clientRoles": {
+            "dokpod-api": [
+              "Reader"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

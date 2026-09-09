@@ -70,6 +70,7 @@ Evidências:
 - certificados sem EKU de cliente e versões de protocolo incompatíveis são rejeitados antes da ativação da sessão;
 - host gRPC configurado com listener HTTPS/HTTP2 explícito, certificado de cliente obrigatório e revogação de cadeia habilitada;
 - cliente gRPC exige endpoint HTTPS e apresenta certificado de cliente por `HttpClientHandler`; sessões ativas são indexadas por ambiente e fencing é verificado no stream;
+- `Dokpod.ControlPlane.Api.Tests`: 2 testes focados aprovados para rejeição de endpoint HTTP no cliente e invalidação da sessão anterior no store do mesmo ambiente;
 - Kestrel com cadeia/revogação mTLS, cliente gRPC do agente, perda de resposta e reconexão permanecem pendentes.
 
 ### P-02: Fundação do monorepo e contratos
@@ -247,3 +248,4 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-07 | P-02 | not-started | in-progress | solução, dependências centralizadas e contrato v1 compilável criados | IA assistida |
 | 2026-09-08 | P-01 | in-progress | in-progress | serialização por ambiente/alvo e validação do mapeamento Protobuf para domínio comprovadas por 28 testes backend | IA assistida |
 | 2026-09-08 | P-01 | in-progress | in-progress | host HTTPS/HTTP2, cliente gRPC com certificado e fencing por ambiente compilados; handshake end-to-end, revogação ativa, perda de resposta e reconexão permanecem pendentes | IA assistida |
+| 2026-09-08 | P-01 | in-progress | in-progress | dois testes focados adicionados e aprovados; handshake Kestrel end-to-end, revogação ativa, perda de resposta e reconexão permanecem pendentes | IA assistida |

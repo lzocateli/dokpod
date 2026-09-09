@@ -1,0 +1,109 @@
+name: altivy-keycloak-lab
+
+services:
+  nginx-proxy:
+    image: lzocateli/nginx:1.28.0-bookworm
+    container_name: altivy-nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7443:7443"
+    volumes:
+      - ${ALTIVY_KEYCLOAK_DEPLOY_ROOT:-../../../AltivyNotes/deploy/keycloak}/../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${ALTIVY_KEYCLOAK_DEPLOY_ROOT:-../../../AltivyNotes/deploy/keycloak}/../nginx/conf.d:/etc/nginx/conf.d:ro
+      - ${ALTIVY_E2E_TLS_CERTIFICATE_PATH:?Defina o caminho absoluto do certificado TLS}:/etc/nginx/certs/tls.crt:ro
+      - ${ALTIVY_E2E_TLS_KEY_PATH:?Defina o caminho absoluto da chave TLS}:/etc/nginx/certs/tls.key:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t >/dev/null 2>&1"]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    stop_grace_period: 10s
+    networks:
+      altivy-edge:
+        ipv4_address: 172.31.0.10
+        aliases:
+          - nginx-proxy
+
+  postgres:
+    image: lzocateli/postgresql:18.4-pgvector0.8.6-bookworm
+    container_name: altivy-postresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${ALTIVY_LAB_POSTGRES_PASSWORD:?Defina ALTIVY_LAB_POSTGRES_PASSWORD no arquivo externo de secrets compartilhado}
+      POSTGRES_DB: keycloak
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ${APPDATA:?APPDATA deve estar definido}/keycloak/postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      start_period: 30s
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    stop_grace_period: 30s
+    networks:
+      - keycloak-internal
+
+  keycloak:
+    image: lzocateli/keycloak:26.7.0
+    container_name: altivy-keycloak
+    restart: unless-stopped
+    command:
+      - start-dev
+      - --import-realm
+      - --spi-theme--static-max-age=-1
+      - --spi-theme--cache-themes=false
+      - --spi-theme--cache-templates=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${ALTIVY_KEYCLOAK_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${ALTIVY_KEYCLOAK_ADMIN_PASSWORD:?Defina ALTIVY_KEYCLOAK_ADMIN_PASSWORD no arquivo externo de secrets compartilhado}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${ALTIVY_LAB_POSTGRES_PASSWORD:?Defina ALTIVY_LAB_POSTGRES_PASSWORD no arquivo externo de secrets compartilhado}
+      KC_HOSTNAME: ${ALTIVY_KEYCLOAK_HOSTNAME:-http://localhost:8080}
+      KC_HOSTNAME_ADMIN: ${ALTIVY_KEYCLOAK_ADMIN_HOSTNAME:-http://localhost:8080}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - ${ALTIVY_KEYCLOAK_DEPLOY_ROOT:-../../../AltivyNotes/deploy/keycloak}/.build/keycloak-theme/altivy:/opt/keycloak/themes/altivy:ro
+      - ./.build/keycloak-theme/dokpod:/opt/keycloak/themes/dokpod:ro
+      - ${ALTIVY_KEYCLOAK_DEPLOY_ROOT:-../../../AltivyNotes/deploy/keycloak}/realm/altivy-realm.json:/opt/keycloak/data/import/altivy-realm.json:ro
+      - ./realm/dokpod-realm.json:/opt/keycloak/data/import/dokpod-realm.json:ro
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          read -r status <&3 && [[ "$$status" == *" 200 "* ]]
+      start_period: 120s
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    stop_grace_period: 30s
+    mem_limit: 2g
+    networks:
+      keycloak-internal:
+      altivy-edge:
+        aliases:
+          - keycloak
+
+networks:
+  keycloak-internal:
+  altivy-edge:
+    external: true
+    name: altivy-edge

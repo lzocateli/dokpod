@@ -1,0 +1,6 @@
+.coverage-run.lock
+.build/
+# Defesa em profundidade; use %APPDATA%\Microsoft\UserSecrets\Altivy.Notes\.env.
+.env
+.env.*
+.tmp/
