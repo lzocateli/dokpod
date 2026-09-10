@@ -13,7 +13,8 @@ applyTo: "backend/libs/**/*DbContext*.cs, backend/libs/**/Migrations/**, backend
 - Comandos, leases, execuções e auditoria são duráveis e possuem índices explícitos.
 - Use concorrência otimista e constraints para invariantes persistentes.
 - Auditoria é append-only; correções geram novo evento.
-- Limite retenção de snapshots e payloads antes de produção.
+- Tabelas com potencial de crescimento elevado ou retenção temporal usam Declarative Partitioning/Table Partitioning por faixa de data; para auditoria, prefira partições mensais, defina criação antecipada, rollover, partição de segurança, índices locais e retenção antes de produção.
+- Teste criação de partições, roteamento de linhas, consultas com pruning, rollover, partição de segurança e comportamento quando a partição esperada não existe.
 - SQL manual exige justificativa e plano de execução medido.
 - Nunca persista chave privada do agente sem proteção apropriada nem conteúdo de secrets do engine.
 - Backup, restore e compatibilidade de migration são gates de release.

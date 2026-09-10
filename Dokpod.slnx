@@ -9,12 +9,14 @@
     <Project Path="backend/libs/Dokpod.Agent.Contracts/Dokpod.Agent.Contracts.csproj" />
     <Project Path="backend/libs/Dokpod.Agent.Infrastructure/Dokpod.Agent.Infrastructure.csproj" />
     <Project Path="backend/libs/Dokpod.ControlPlane.Application/Dokpod.ControlPlane.Application.csproj" />
+    <Project Path="backend/libs/Dokpod.ControlPlane.Infrastructure/Dokpod.ControlPlane.Infrastructure.csproj" />
     <Project Path="backend/libs/Dokpod.Domain/Dokpod.Domain.csproj" />
   </Folder>
   <Folder Name="/backend/tests/">
     <Project Path="backend/tests/Dokpod.Agent.Application.Tests/Dokpod.Agent.Application.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.Agent.Infrastructure.Tests/Dokpod.Agent.Infrastructure.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.ControlPlane.Application.Tests/Dokpod.ControlPlane.Application.Tests.csproj" />
+    <Project Path="backend/tests/Dokpod.Architecture.Tests/Dokpod.Architecture.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.ControlPlane.Api.Tests/Dokpod.ControlPlane.Api.Tests.csproj" />
     <Project Path="backend/tests/Dokpod.Domain.Tests/Dokpod.Domain.Tests.csproj" />
   </Folder>

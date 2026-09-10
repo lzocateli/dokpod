@@ -11,5 +11,6 @@
   <ItemGroup>
     <ProjectReference Include="../../libs/Dokpod.Agent.Contracts/Dokpod.Agent.Contracts.csproj" />
     <ProjectReference Include="../../libs/Dokpod.ControlPlane.Application/Dokpod.ControlPlane.Application.csproj" />
+    <ProjectReference Include="../../libs/Dokpod.ControlPlane.Infrastructure/Dokpod.ControlPlane.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

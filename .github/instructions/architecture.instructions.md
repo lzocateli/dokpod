@@ -20,6 +20,7 @@ applyTo: "backend/**, frontend/**, contracts/**, deploy/**"
 - O Dokpod não mantém senhas, memberships nem políticas próprias; agentes continuam autenticados por mTLS.
 - Modele Docker e Podman por capabilities e adapters distintos.
 - Não introduza broker, cache distribuído, novo datastore ou microsserviço sem ADR.
+- Tabelas ou coleções com potencial de crescimento elevado devem usar Table Partitioning/Declarative Partitioning por faixa temporal ou outra estratégia equivalente do banco adotado; a decisão deve cobrir granularidade, criação antecipada, rollover, retenção, índices, pruning, backup/restore e comportamento quando faltar uma partição.
 - Nova fronteira de confiança, mudança na integração Keycloak, protocolo ou mudança incompatível exige ADR.
 - Dependências externas exigem licença permissiva, gratuita e verificada na versão exata.
 - Testes de arquitetura impedem referências proibidas e ciclos.

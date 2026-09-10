@@ -93,6 +93,7 @@ Não crie dependências circulares. Hosts compõem; bibliotecas implementam regr
 - APIs públicas usam OpenAPI, `application/problem+json` e versionamento explícito.
 - Mudanças de protocolo mantêm compatibilidade N/N-1 ou documentam migração e rollout.
 - Mudanças de schema seguem expand-contract e devem ser testadas com PostgreSQL real.
+- Tabelas com potencial de crescimento elevado ou retenção temporal devem usar Table Partitioning/Declarative Partitioning por faixa de data, preferencialmente partições mensais; a solução deve definir criação antecipada, rollover, partição de segurança para datas fora da janela, índices por partição, retenção e testes de roteamento antes da produção, independentemente do banco de dados adotado.
 
 ## Qualidade mínima
 

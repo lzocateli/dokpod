@@ -5,6 +5,7 @@ using System.Net;
 using Dokpod.Agent.Contracts.V1;
 using Dokpod.ControlPlane.Api.Agents;
 using Dokpod.ControlPlane.Application.Agents;
+using Dokpod.ControlPlane.Infrastructure;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 
@@ -66,6 +67,12 @@ public static class ApiHost
         builder.Services.AddSingleton<IAgentIdentityRegistry, EnvironmentVariableAgentIdentityRegistry>();
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
         builder.Services.AddSingleton<AgentSessionNegotiator>();
+        var databaseConnectionString = builder.Configuration.GetConnectionString("ControlPlane");
+        if (!string.IsNullOrWhiteSpace(databaseConnectionString))
+        {
+            builder.Services.AddControlPlaneInfrastructure(databaseConnectionString);
+        }
+
         options.ConfigureServices?.Invoke(builder.Services);
         return builder;
     }
