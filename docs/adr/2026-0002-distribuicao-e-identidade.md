@@ -45,11 +45,14 @@ Centraliza identidade e autorização, mantém tokens fora do browser e permite 
 ## Decisão
 
 - Backend, BFF e frontend são sempre executados em containers.
-- O agente Linux é sempre executado em container.
-- O agente Windows é um Worker Service .NET 10 publicado self-contained e instalado como Windows Service, sem runtime .NET pré-instalado.
+- O frontend Angular opera como Single Page Application (SPA) e exige a implementação do Backend-For-Frontend (BFF). O browser nunca acessa diretamente a API do plano de controle nem recebe/armazena tokens OIDC/OAuth 2.0 (access tokens ou refresh tokens).
+- O BFF é o único cliente OIDC confidencial exposto ao browser, sendo responsável por login, callback, logout, gestão de cookies de sessão protegidos (`HttpOnly`, `Secure`, `SameSite`), proteção antiforgery/CSRF e relay das requisições para a API.
+- A API do plano de controle atua exclusivamente como Policy Enforcement Point (PEP), validando requisições do BFF e aplicando decisões do Keycloak com lógica fail-closed.
+- O agente é o **único responsável** por coletar dados e comunicar-se entre a API do plano de controle e as engines de container (Docker ou Podman). A API nunca acessa diretamente os sockets ou APIs das engines. Sem o agente em execução em uma determinada máquina, a API sozinha não terá nenhum conhecimento ou visibilidade sobre os containers em execução nessa máquina.
+- Em máquinas **Windows**, o agente é um Worker Service .NET 10 publicado self-contained e instalado como **Windows Service** (programa de serviço) para coletar e operar os containers Windows/engine do host, sem exigir runtime .NET pré-instalado.
+- Em máquinas **Linux** ou em máquinas/hosts contendo **Docker Desktop** ou **Podman Desktop**, o agente pode e deve ser lançado em **container OCI**, montando o socket local da engine.
 - O monorepo segue a organização geral do AltivyNotes, com hosts em `backend/apps`, bibliotecas em `backend/libs`, frontend, contratos, testes e deployment separados.
 - Keycloak é a plataforma externa obrigatória para autenticação e decisão de autorização de usuários.
-- O BFF é cliente OIDC confidencial; a API é o Policy Enforcement Point.
 - A identidade técnica dos agentes permanece independente, por mTLS e certificado individual por ambiente.
 
 Esta decisão foi definida explicitamente pelo responsável pelo produto em 2026-09-06.

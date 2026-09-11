@@ -10,12 +10,12 @@ O Dokpod separa o plano de controle dos hosts que executam containers. O plano d
 | --- | --- | --- |
 | Web | experiência administrativa Angular | acessar engine, banco ou protocolo do agente |
 | BFF | cliente OIDC confidencial, sessão do browser, antiforgery e relay de tokens | decidir autorização ou expor tokens ao browser |
-| API | validar tokens, aplicar decisões do Keycloak, contratos HTTP e sessão de agentes | manter usuários/políticas ou conter adapter específico de engine |
+| API | validar tokens, aplicar decisões do Keycloak, contratos HTTP e sessão de agentes | manter usuários/políticas, conter adapter específico ou conectar diretamente a sockets de engines |
 | Keycloak | usuários, credenciais, MFA, sessões, grupos, roles, recursos, scopes e políticas | executar regras de domínio ou identificar agentes |
 | Aplicação | casos de uso, idempotência e coordenação | depender de ASP.NET Core ou EF Core |
 | Domínio | ambientes, capacidades, comandos e invariantes | depender de infraestrutura |
 | Infraestrutura | PostgreSQL, engine clients, certificados e transporte | expor modelos internos como DTO público |
-| Agente | inventário, execução local e reporte | decidir autorização do usuário final sozinho |
+| Agente | único responsável pela coleta, inspeção de containers na engine local (Docker/Podman) e comunicação com a API | decidir autorização do usuário final sozinho |
 
 ## Dependências permitidas
 
@@ -44,8 +44,10 @@ Hosts são composition roots. Regras reutilizáveis pertencem às bibliotecas. C
 
 - Web Angular, BFF e API são sempre construídos e executados como containers.
 - PostgreSQL e Keycloak são serviços externos obrigatórios ao plano de controle, normalmente executados por containers com dados e backups independentes.
-- Em Linux, o agente é sempre uma imagem OCI e acessa o Unix socket explicitamente montado.
-- Em Windows, o agente é publicado como Worker Service self-contained por RID suportado e instalado como Windows Service. O host não precisa de runtime .NET.
+- **Papel exclusivo do agente no inventário**: O agente é o **único responsável** pela comunicação entre a API do plano de controle e as engines de container (Docker ou Podman). A API nunca acessa diretamente os sockets ou APIs das engines nos hosts. Se uma determinada máquina não tiver um agente ativo em execução, a API não terá nenhum conhecimento ou visibilidade sobre os containers em execução nessa máquina.
+- **Forma de execução do agente por SO/ambiente**:
+  - Em máquinas **Windows**, o agente é um Worker Service .NET 10 self-contained instalado como **Windows Service**, dedicado a coletar e comunicar-se com os containers do host. O host Windows não necessita de runtime .NET pré-instalado.
+  - Em máquinas **Linux** ou em ambientes de desenvolvimento/desktop contendo **Docker Desktop** ou **Podman Desktop**, o agente pode/deve ser lançado em **container OCI**, montando o socket local da engine.
 - O pacote Windows inclui executável, dependências, configuração não secreta, manifesto de versão e procedimento de instalação/remoção. Chaves, certificados e journal ficam fora do diretório do binário, em armazenamento persistente protegido por ACL.
 - O mesmo contrato e os mesmos casos de uso do agente valem nas duas distribuições; integração com lifecycle, filesystem, socket/pipe e atualização pertence ao adapter de plataforma.
 - Builds, testes e runtimes seguem a matriz versionada em [Distribuição e operação](distribuicao.md#imagens-base-e-toolchains).

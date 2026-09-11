@@ -21,6 +21,8 @@ O resultado observável será uma trilha durável que registre ator, ação, amb
 - O domínio não dependerá de EF Core, Npgsql ou ASP.NET Core.
 - A infraestrutura será adicionada ao plano de controle, sem criar um datastore novo.
 - Keycloak continuará sendo a autoridade para identidade e decisão de autorização.
+- O frontend do Dokpod será uma SPA Angular; como regra de arquitetura, o browser nunca acessa a API diretamente. A implementação do BFF é obrigatória e faz parte do MVP, não um detalhe opcional de uma fase posterior.
+- O BFF será o único ponto de entrada do browser para login, callback, logout, sessão, antiforgery e comunicação com a API. A API continua sendo o Policy Enforcement Point e não expõe tokens ao navegador.
 - A auditoria não armazenará tokens, certificados privados, secrets, payload integral do engine ou conteúdo de logs.
 - Eventos corrigidos serão novos eventos; não haverá atualização ou exclusão lógica de eventos existentes.
 - A implementação deverá ser compatível com retry, cancelamento, resposta perdida e concorrência.
@@ -41,6 +43,10 @@ O resultado observável será uma trilha durável que registre ator, ação, amb
 3. Verificação da licença, manutenção e versão exata dos pacotes NuGet antes de adicioná-los ao gerenciamento central.
 4. PostgreSQL real disponível no ambiente de validação containerizada, sem leitura ou criação de secrets dentro do workspace.
 5. Definição do caso de uso de cadastro/aprovação de ambiente e do contrato de decisão Keycloak antes da integração final.
+6. Para testes de integração que envolvam PostgreSQL, usar a imagem oficial/documentada do Postgres em container, subir o container de teste, aplicar a migration e o seed mínimo necessário, executar os testes e remover o container ao final. A validação não pode depender de uma instância compartilhada em estado mutável durante a execução do teste.
+7. O banco PostgreSQL usado pela aplicação deve usar a mesma instância compartilhada já existente no AltivyNotes, desde que seja um ambiente empresarial compartilhado e as aplicações usem schemas distintos. O Dokpod deve criar seu próprio namespace lógico de schema e não misturar dados com outros produtos.
+8. Quando houver necessidade funcional de cache, usar Redis com a imagem já documentada no stack do projeto e manter o serviço sempre atrás do proxy reverso existente da stack, sem expor a infraestrutura de cache diretamente à internet ou ao cliente.
+9. No fechamento do desenvolvimento, deve existir uma stack de teste de performance/carga com k6 usando a imagem já disponibilizada no repositório, e uma stack de testes E2E usando a imagem docker do Playwright E2E já existente no stack do projeto.
 
 ## Etapas
 
@@ -232,7 +238,9 @@ Entregas:
 - clone concorrente;
 - replay, token expirado e revogação de stream;
 - backup/restore da tabela e migration;
-- teste de recuperação após resposta perdida.
+- teste de recuperação após resposta perdida;
+- stack de performance/carga com k6 usando a imagem já disponibilizada no stack do projeto;
+- stack de testes E2E usando a imagem Docker do Playwright E2E já existente.
 
 Validação:
 
@@ -240,7 +248,8 @@ Validação:
 - PostgreSQL real em container;
 - testes de engine Docker aplicáveis permanecem verdes;
 - análise de secrets e vulnerabilidades;
-- revisão de código e segurança antes de alterar status do P-03.
+- revisão de código e segurança antes de alterar status do P-03;
+- execução da stack de teste de carga e e2e em ambiente controlado e cleanup final.
 
 Evidências:
 
