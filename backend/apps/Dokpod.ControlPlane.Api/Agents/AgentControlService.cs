@@ -47,6 +47,11 @@ public sealed class AgentControlService(
         var invalidated = sessionStore.WaitUntilInactiveAsync(session, CancellationToken.None);
         try
         {
+            if (!sessionStore.IsActive(session))
+            {
+                throw new RpcException(new Status(StatusCode.Aborted, "agent_session_fenced"));
+            }
+
             await responseStream.WriteAsync(new ControlPlaneMessage
             {
                 Metadata = new MessageMetadata

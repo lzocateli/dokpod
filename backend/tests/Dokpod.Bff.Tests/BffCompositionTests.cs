@@ -1,5 +1,8 @@
 using Dokpod.Bff;
 using Dokpod.Bff.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -19,6 +22,8 @@ public sealed class BffCompositionTests
         var routes = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
             .OfType<RouteEndpoint>().Select(endpoint => endpoint.RoutePattern.RawText)
             .ToHashSet(StringComparer.Ordinal);
+        var loginEndpoint = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
+            .Single(endpoint => endpoint is RouteEndpoint route && route.RoutePattern.RawText == "/bff/login");
 
         Assert.Contains("/health/live", routes);
         Assert.Contains("/health/ready", routes);
@@ -27,6 +32,7 @@ public sealed class BffCompositionTests
         Assert.Contains("/bff/session", routes);
         Assert.Contains("/bff/antiforgery", routes);
         Assert.DoesNotContain("/api/{**path}", routes);
+        Assert.Equal("login", loginEndpoint.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName);
     }
 
     [Fact]
@@ -49,5 +55,26 @@ public sealed class BffCompositionTests
         var keycloak = provider.GetRequiredService<IOptions<KeycloakOptions>>().Value;
         Assert.Equal("dokpod-bff", keycloak.ClientId);
         Assert.Contains("https://localhost", security.AllowedOrigins);
+    }
+
+    [Fact]
+    public void CreateBuilder_ConfiguresSecureOidcCookieAndLoginRateLimit()
+    {
+        var builder = BffHost.CreateBuilder(["--environment=Development"]);
+        builder.Configuration["Authentication:Keycloak:ClientSecret"] = "synthetic-test-secret";
+        using var provider = builder.Services.BuildServiceProvider();
+
+        var oidc = provider.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>()
+            .Get(OpenIdConnectDefaults.AuthenticationScheme);
+        var cookie = provider.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(CookieAuthenticationDefaults.AuthenticationScheme);
+
+        Assert.True(oidc.UsePkce);
+        Assert.False(oidc.RequireHttpsMetadata);
+        Assert.IsType<HttpClientHandler>(oidc.BackchannelHttpHandler);
+        Assert.False(((HttpClientHandler)oidc.BackchannelHttpHandler).AllowAutoRedirect);
+        Assert.Equal(typeof(CookieTokenRefreshEvents), cookie.EventsType);
+        Assert.IsType<ServerSideTicketStore>(cookie.SessionStore);
+        Assert.Contains("__Host-Dokpod.Session", cookie.Cookie.Name);
     }
 }

@@ -14,10 +14,11 @@ O `nginx-proxy` compartilhado publica a Web do Dokpod pelo caminho
 `https://localhost:7443/dokpod/`. Essa topologia não exige alteração de DNS,
 arquivo `hosts` ou resolver local.
 
-O BFF ainda não entra nesta stack porque o host `Dokpod.Bff` não possui código
-fonte versionado nesta etapa. Quando o BFF for criado, ele deve ser o único
-serviço chamado pela Web e deve entrar na rede `altivy-edge` com alias
-`dokpod-bff`.
+O host `Dokpod.Bff` já possui código fonte versionado, mas ainda não entra nesta
+stack porque a API não publica a superfície HTTP versionada que o BFF deverá
+encaminhar. O BFF deve ser incluído somente junto com o relay server-side de
+`/api/v1` e `/hubs`, permanecendo como o único serviço chamado pela Web na rede
+`altivy-edge` com alias `dokpod-bff`.
 
 ## Pré-requisitos
 

@@ -20,10 +20,13 @@ public sealed class ConfigureOpenIdConnectOptions(IOptions<KeycloakOptions> keyc
         options.ResponseMode = "query";
         options.UsePkce = true;
         options.SaveTokens = true;
+        options.GetClaimsFromUserInfoEndpoint = false;
         options.MapInboundClaims = false;
         options.CallbackPath = keycloak.CallbackPath;
         options.SignedOutCallbackPath = keycloak.SignedOutCallbackPath;
-        options.RequireHttpsMetadata = true;
+        options.BackchannelHttpHandler = KeycloakHttpMessageHandlerFactory.Create(keycloak.Authority);
+        options.RequireHttpsMetadata = Uri.TryCreate(keycloak.Authority, UriKind.Absolute, out var authority)
+            && string.Equals(authority.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
         options.Scope.Clear();
         options.Scope.Add("openid");
         options.Scope.Add("profile");

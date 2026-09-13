@@ -178,6 +178,31 @@ public sealed class TransportBoundaryTests
     }
 
     [Fact]
+    public async Task KestrelSession_ActiveInvalidationFencesStream()
+    {
+        using var certificates = TestCertificates.Create();
+        var environmentId = Guid.NewGuid();
+        var fingerprint = Convert.ToHexString(SHA256.HashData(certificates.Agent.RawData));
+        await using var app = await StartApiAsync(certificates, environmentId, fingerprint);
+        using var handler = CreateHttpHandler(certificates);
+        using var channel = GrpcChannel.ForAddress(
+            GetGrpcEndpoint(app),
+            new GrpcChannelOptions { HttpHandler = handler });
+        var client = new AgentControl.AgentControlClient(channel);
+        using var call = client.Connect(cancellationToken: TestContext.Current.CancellationToken);
+        await EstablishSessionAsync(call);
+
+        await app.Services.GetRequiredService<IAgentSessionStore>()
+            .InvalidateEnvironmentAsync(environmentId, TestContext.Current.CancellationToken);
+
+        var exception = await Assert.ThrowsAsync<RpcException>(async () =>
+            await call.ResponseStream.MoveNext(TestContext.Current.CancellationToken));
+
+        Assert.Equal(StatusCode.Aborted, exception.StatusCode);
+        Assert.Equal("agent_session_fenced", exception.Status.Detail);
+    }
+
+    [Fact]
     public async Task KestrelSession_RejectsReplayedSequence()
     {
         using var certificates = TestCertificates.Create();

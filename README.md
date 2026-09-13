@@ -138,6 +138,7 @@ tools/scripts/               # automação global de infraestrutura e manutenç�
 - [Viabilidade técnica](docs/viabilidade.md)
 - [Arquitetura](docs/arquitetura.md)
 - [Backend e agente](docs/backend.md)
+- [Backend-For-Frontend](docs/bff.md)
 - [Frontend](docs/frontend.md)
 - [Segurança](docs/seguranca.md)
 - [Configuração do Keycloak](docs/configuracao-keycloak.md)

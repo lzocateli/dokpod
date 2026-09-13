@@ -42,8 +42,12 @@ Evidências:
 - `build-agent-image` e `smoke-agent-image`: imagem Linux construída e executada como usuário não root, filesystem read-only e acesso ao socket somente por grupo suplementar;
 - certificados sem EKU de cliente e versões de protocolo incompatíveis são rejeitados antes da ativação da sessão;
 - host gRPC configurado com listener HTTPS/HTTP2 explícito, certificado de cliente obrigatório e revogação de cadeia habilitada;
-### P-02: Fundação do monorepo e contratos
+- testes focados de transporte aprovados (12 testes), incluindo handshake Kestrel/mTLS, fencing por reconexão, invalidação ativa de sessão e rejeição de metadados inválidos;
+- testes focados do negociador aprovados (4 testes), cobrindo fingerprint, EKU, versão de protocolo, enums e capabilities;
+- invalidação ativa encerra o stream com `agent_session_fenced` e a confirmação do handshake verifica a sessão antes do primeiro envio;
+- revogação persistente da identidade, bloqueio de reconexão após revogação e integração com o caso de uso de cadastro permanecem pendentes para P-03;
 
+### P-02: Fundação do monorepo e contratos
 **Status:** in-progress  
 **Dependências:** P-01
 

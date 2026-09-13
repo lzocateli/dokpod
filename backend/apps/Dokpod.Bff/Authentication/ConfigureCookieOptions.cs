@@ -4,11 +4,9 @@ using Microsoft.Extensions.Options;
 namespace Dokpod.Bff.Authentication;
 
 public sealed class ConfigureCookieOptions(ServerSideTicketStore ticketStore)
-    : IConfigureNamedOptions<CookieAuthenticationOptions>
+    : IPostConfigureOptions<CookieAuthenticationOptions>
 {
-    public void Configure(CookieAuthenticationOptions options) => Configure(CookieAuthenticationDefaults.AuthenticationScheme, options);
-
-    public void Configure(string? name, CookieAuthenticationOptions options)
+    public void PostConfigure(string? name, CookieAuthenticationOptions options)
     {
         if (!string.Equals(name, CookieAuthenticationDefaults.AuthenticationScheme, StringComparison.Ordinal)) return;
         options.Cookie.Name = "__Host-Dokpod.Session";
@@ -20,6 +18,7 @@ public sealed class ConfigureCookieOptions(ServerSideTicketStore ticketStore)
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = false;
         options.SessionStore = ticketStore;
+        options.EventsType = typeof(CookieTokenRefreshEvents);
         options.Events.OnRedirectToLogin = context =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;

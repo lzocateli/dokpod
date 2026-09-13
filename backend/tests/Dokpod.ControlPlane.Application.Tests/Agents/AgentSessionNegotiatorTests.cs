@@ -123,6 +123,9 @@ public sealed class AgentSessionNegotiatorTests
         public ValueTask<AgentSession> ActivateAsync(Guid environmentId, CancellationToken cancellationToken) =>
             ValueTask.FromResult(new AgentSession(environmentId, Guid.NewGuid(), ++fencingToken));
 
+        public ValueTask InvalidateEnvironmentAsync(Guid environmentId, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
+
         public bool IsActive(AgentSession session) => true;
 
         public Task WaitUntilInactiveAsync(AgentSession session, CancellationToken cancellationToken) =>

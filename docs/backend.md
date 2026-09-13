@@ -26,6 +26,8 @@ backend/tests/
 
 O agente e o plano de controle compartilham somente domínio realmente comum e contratos versionados. API, BFF e agente possuem composition roots, configurações e permissões próprias. API e BFF são sempre executados em containers. O agente usa uma imagem OCI em Linux e publicação self-contained como Windows Service em Windows.
 
+O fluxo, as garantias e as limitações atuais do BFF estão documentados em [BFF do Dokpod](bff.md). O BFF não deve ser considerado integrado ponta a ponta enquanto a API não possuir a superfície HTTP que será encaminhada pelo relay.
+
 ## Transporte do agente
 
 Cada agente mantém um único stream gRPC bidirecional HTTP/2 com mTLS para a API. O contrato Protocol Buffers v1 negocia versão e capabilities e transporta apresentação, heartbeat, deltas, snapshots paginados, comandos, aceite e resultado. Inscrição e emissão inicial de certificado usam HTTPS separado; REST não substitui o canal operacional e o agente não expõe proxy genérico do engine.
