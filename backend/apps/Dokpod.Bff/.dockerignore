@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+**/bin
+**/obj
+**/TestResults
+**/coverage
+artifacts
+secrets*
+backups

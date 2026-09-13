@@ -46,6 +46,35 @@ public sealed class ArchitectureTests
         Assert.DoesNotContain(includes, value => value.Contains("Dokpod.ControlPlane.Api", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void DomainAndApplication_DoNotReferenceEntityFrameworkCore()
+    {
+        var backendRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+        var protectedProjects = new[]
+        {
+            Path.Combine(backendRoot, "libs/Dokpod.Domain"),
+            Path.Combine(backendRoot, "libs/Dokpod.ControlPlane.Application"),
+            Path.Combine(backendRoot, "libs/Dokpod.Agent.Application"),
+        };
+
+        foreach (var projectDirectory in protectedProjects)
+        {
+            var projectFiles = Directory.EnumerateFiles(projectDirectory, "*.csproj", SearchOption.TopDirectoryOnly);
+            foreach (var projectFile in projectFiles)
+            {
+                var projectText = File.ReadAllText(projectFile);
+                Assert.DoesNotContain("EntityFrameworkCore", projectText, StringComparison.OrdinalIgnoreCase);
+            }
+
+            var sourceFiles = Directory.EnumerateFiles(projectDirectory, "*.cs", SearchOption.AllDirectories);
+            foreach (var sourceFile in sourceFiles)
+            {
+                var sourceText = File.ReadAllText(sourceFile);
+                Assert.DoesNotContain("Microsoft.EntityFrameworkCore", sourceText, StringComparison.Ordinal);
+            }
+        }
+    }
+
     private static IReadOnlyList<string> GetProjectReferences(string projectPath)
     {
         var fullPath = Path.GetFullPath(projectPath);

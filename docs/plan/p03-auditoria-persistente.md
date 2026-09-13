@@ -52,7 +52,7 @@ O resultado observável será uma trilha durável que registre ator, ação, amb
 
 ### P03-01: Decisão arquitetural e ADR
 
-**Status:** in-progress  
+**Status:** completed  
 **Responsável:** Lincoln Zocateli  
 **Dependências:** nenhuma
 
@@ -102,7 +102,7 @@ Evidências:
 
 ### P03-03: Dependências e schema de auditoria
 
-**Status:** not-started  
+**Status:** completed  
 **Responsável:** Lincoln Zocateli  
 **Dependências:** P03-01 e P03-02
 
@@ -130,11 +130,21 @@ Validação:
 
 Evidências:
 
-- pendente.
+- migration expand criada em `backend/libs/Dokpod.ControlPlane.Infrastructure/Migrations/202609120001_CreateAuditEvents.cs`;
+- tabela `audit_events` particionada por `OccurredAtUtc`, com partições mensais antecipadas e partição `DEFAULT` de segurança;
+- registro não particionado `audit_event_keys` preserva unicidade global de `EventId` e classificação de payload conflitante;
+- PostgreSQL 17 descartável confirmou aplicação da migration, roteamento de insert, índices e rejeição de `UPDATE` pela role de runtime;
+- procedimento operacional registrado em [runbook de auditoria PostgreSQL](../runbooks/operacao-auditoria-postgresql.md);
+- mapeamentos EF Core separados por entidade em `Persistence/Configurations`, compostos pelo `ControlPlaneDbContext`;
+- teste arquitetural confirma que Domain e Application não referenciam pacotes nem namespaces do EF Core;
+- testes opt-in `PostgresAuditSchemaIntegrationTests` cobrem roteamento mensal, partição `DEFAULT` e rejeição de mutação quando uma conexão PostgreSQL de laboratório é injetada;
+- testes PostgreSQL reais passaram em container descartável para roteamento mensal, partição `DEFAULT` e rejeição de mutação;
+- validação humana registrada nesta continuação: P03-03 considerado validado e encerrado pelo solicitante;
+- pruning/rollover automatizado e validação formal de privilégios permanecem requisitos operacionais acompanhados pelo runbook, sem alterar o escopo desta etapa.
 
 ### P03-04: Writer append-only idempotente
 
-**Status:** not-started  
+**Status:** in-progress  
 **Responsável:** Lincoln Zocateli  
 **Dependências:** P03-03
 
@@ -159,11 +169,18 @@ Validação:
 
 Evidências:
 
-- pendente.
+- `PostgresAuditEventWriter` implementa append transacional, hash de payload, retry idempotente e rejeição de conflito;
+- testes unitários cobrem inserção, retry, conflito e cancelamento;
+- testes PostgreSQL reais cobrem concorrência com mesmo payload e payload divergente, com 4/4 cenários aprovados;
+- mapeamento EF usa nomes físicos `snake_case` compatíveis com a migration;
+- `EnvironmentAccessServiceTests` confirma que falha de persistência de auditoria impede confirmar o cadastro;
+- escrita PostgreSQL passa por `dokpod_append_audit_event` com `SECURITY DEFINER`; a role runtime não possui `INSERT` direto nas tabelas;
+- falhas não relacionadas a violação de unicidade não são classificadas como conflito de idempotência;
+- revisão humana registrada nesta continuação: P03-04 considerado revisado e encerrado pelo solicitante.
 
 ### P03-05: Caso de uso de cadastro e aprovação
 
-**Status:** not-started  
+**Status:** in-progress  
 **Responsável:** Lincoln Zocateli  
 **Dependências:** P03-04 e contrato de autorização Keycloak definido
 
@@ -189,7 +206,15 @@ Validação:
 
 Evidências:
 
-- pendente.
+- porta `IEnvironmentAuthorizationDecider` criada no Application, sem dependência de Keycloak ou infraestrutura;
+- decisão recebe somente recurso opaco, scope, ator e correlation ID;
+- `EnvironmentAccessService` não usa `EnvironmentRegistration.Scopes` como autorização final;
+- decisões negadas e indeterminadas geram auditoria com resultado correspondente e não confirmam o cadastro;
+- o caso de uso recebe `AuthenticatedActor` derivado do subject autenticado, sem aceitar um `actorId` solto como contrato;
+- exceções do decider são convertidas em decisão `authorization_unavailable`/`Indeterminate` e auditadas antes do retorno fechado; cancelamento explícito é propagado;
+- decisões externas inválidas ou sem código de falha são normalizadas para `authorization_invalid`/`Indeterminate`;
+- testes verificam actor, scope, correlation ID e URN opaco, além de provar que nome/host não são encaminhados;
+- adapter/cliente Keycloak concreto permanece pendente, conforme o contrato aprovado de integração externa.
 
 ### P03-06: API, contrato e observabilidade
 

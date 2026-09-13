@@ -6,6 +6,7 @@ using Dokpod.Agent.Contracts.V1;
 using Dokpod.ControlPlane.Api.Agents;
 using Dokpod.ControlPlane.Application.Agents;
 using Dokpod.ControlPlane.Infrastructure;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 
@@ -64,6 +65,8 @@ public static class ApiHost
             options.MaxReceiveMessageSize = 1_048_576;
             options.MaxSendMessageSize = 1_048_576;
         });
+        builder.Services.AddHealthChecks()
+            .AddCheck("controlplane-api", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["ready"]);
         builder.Services.AddSingleton<IAgentIdentityRegistry, EnvironmentVariableAgentIdentityRegistry>();
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
         builder.Services.AddSingleton<AgentSessionNegotiator>();
@@ -80,7 +83,15 @@ public static class ApiHost
     public static void MapEndpoints(WebApplication app)
     {
         app.MapGrpcService<AgentControlService>();
-        app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
+        app.MapHealthChecks("/health/live", new HealthCheckOptions
+        {
+            Predicate = _ => false,
+        }).AllowAnonymous();
+
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains("ready"),
+        }).AllowAnonymous();
     }
 
     private static ApiHostOptions LoadOptionsFromEnvironment()

@@ -1,6 +1,6 @@
 # ADR 2026-0003: Licenciamento e edições do produto
 
-**Status:** accepted  
+**Status:** approved  
 **Data:** 2026-09-06  
 **Responsáveis:** Lincoln Zocateli  
 **Origem:** humano  

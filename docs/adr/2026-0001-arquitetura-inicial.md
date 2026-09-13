@@ -1,6 +1,6 @@
 # ADR 2026-0001: Arquitetura inicial do plano de controle e agentes
 
-**Status:** accepted  
+**Status:** approved  
 **Data:** 2026-09-06  
 **Responsáveis:** Lincoln Zocateli  
 **Origem:** humano, com elaboração por IA assistida  

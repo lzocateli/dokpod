@@ -6,7 +6,8 @@
 2. Procure issue, ADR e plano relacionados.
 3. Para mudança relevante, registre resultado observável, não escopo e riscos.
 4. Nunca inclua tokens, chaves, certificados privados, dados reais de infraestrutura ou logs sensíveis.
-5. Instale o hook obrigatório de detecção de secrets em cada clone:
+5. Para persistência e migrations, siga as [convenções de EF Core](EFCORE.md); secrets permanecem no provider externo de User Secrets.
+6. Instale o hook obrigatório de detecção de secrets em cada clone:
 
    ```powershell
    ./tools/scripts/install-gitleaks-hook.ps1

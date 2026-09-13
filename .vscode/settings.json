@@ -1,5 +1,6 @@
 {
   "chat.tools.terminal.autoApprove": {
-    "/^(?:(?:\\$ErrorActionPreference\\s*=\\s*[^;]+|(?:git (?:status --short|diff|blame|log)|Get-ChildItem|Get-Content|Push-Location|dotnet|docker|ng|node|npm|uv (?:build|run --rm))\\b[^;]*)(?:\\s*;\\s*|$))+$/i": true
+    "^git\\s+status(?:\\s+.*)?$": true,
+    "/^(?:(?:\\$ErrorActionPreference\\s*=\\s*[^;]+|(?:git (?:status|diff|log|rev-parse|grep)|rg|Get-ChildItem|Get-Content|Select-String|Set-Location|Push-Location|Pop-Location|dotnet (?:build|test|restore|run)|docker (?:ps|build|run|logs|images)|ng (?:build|test|serve|lint)|node|npm|npx|uv (?:run|sync|build)|python|pwsh)\\b[^;]*|Set-Location\\b[^;]*)(?:\\s*;\\s*|$))+$/i": true
   }
 }

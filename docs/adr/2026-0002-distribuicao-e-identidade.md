@@ -1,6 +1,6 @@
 # ADR 2026-0002: Distribuição por plataforma e identidade com Keycloak
 
-**Status:** accepted  
+**Status:** approved  
 **Data:** 2026-09-06  
 **Responsáveis:** Lincoln Zocateli  
 **Origem:** humano  

@@ -1,0 +1,37 @@
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+
+namespace Dokpod.Bff.Authentication;
+
+public sealed class ConfigureOpenIdConnectOptions(IOptions<KeycloakOptions> keycloakOptions)
+    : IConfigureNamedOptions<OpenIdConnectOptions>
+{
+    public void Configure(OpenIdConnectOptions options) => Configure(OpenIdConnectDefaults.AuthenticationScheme, options);
+
+    public void Configure(string? name, OpenIdConnectOptions options)
+    {
+        if (!string.Equals(name, OpenIdConnectDefaults.AuthenticationScheme, StringComparison.Ordinal)) return;
+        var keycloak = keycloakOptions.Value;
+        options.Authority = keycloak.Authority.TrimEnd('/');
+        options.ClientId = keycloak.ClientId;
+        options.ClientSecret = keycloak.ClientSecret;
+        options.ResponseType = "code";
+        options.ResponseMode = "query";
+        options.UsePkce = true;
+        options.SaveTokens = true;
+        options.MapInboundClaims = false;
+        options.CallbackPath = keycloak.CallbackPath;
+        options.SignedOutCallbackPath = keycloak.SignedOutCallbackPath;
+        options.RequireHttpsMetadata = true;
+        options.Scope.Clear();
+        options.Scope.Add("openid");
+        options.Scope.Add("profile");
+        options.Scope.Add("email");
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            NameClaimType = "preferred_username",
+            ValidateIssuer = true
+        };
+    }
+}
