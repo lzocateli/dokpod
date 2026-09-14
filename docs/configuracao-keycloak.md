@@ -124,6 +124,42 @@ Nenhum token de usuário é encaminhado ao agente.
 - provisionamento repetido converge sem duplicar recursos;
 - agente válido sem autorização de usuário não cria comando por conta própria.
 
+## Prova UMA do Dokpod
+
+O script `tools/scripts/test-keycloak-authorization-spike.ps1` valida a mesma
+decisão UMA usada pela API, sem expor ou persistir o access token. Ele envia ao
+realm `dokpod` uma decisão para o recurso
+`urn:dokpod:environment:{EnvironmentId}` e um scope suportado, usando a
+audience `dokpod-api`.
+
+Antes da execução, o recurso precisa existir no Authorization Services do
+client `dokpod-api` e o token do usuário precisa ser destinado a essa API. O
+token pode ser injetado pelo processo em `DOKPOD_SPIKE_USER_ACCESS_TOKEN` ou
+fornecido como `SecureString`; nunca coloque token em arquivo, histórico ou
+argumento persistido.
+
+Valide primeiro sem rede:
+
+```powershell
+./tools/scripts/test-keycloak-authorization-spike.ps1 -DryRun
+```
+
+Execute uma decisão real com token efêmero:
+
+```powershell
+$token = Read-Host 'Access token efêmero' -AsSecureString
+./tools/scripts/test-keycloak-authorization-spike.ps1 `
+    -UserAccessToken $token `
+    -EnvironmentId 00000000-0000-0000-0000-000000000001 `
+    -Scope environment:read `
+    -Expected allowed
+```
+
+O resultado contém somente `iteration`, `outcome`, `statusCode` e `durationMs`.
+`allowed` confirma concessão; `denied` confirma negação; falhas de transporte,
+timeout ou JSON inválido são reportadas como `indeterminate` e retornam falha
+quando `-Expected allowed` ou `-Expected denied` não for atendido.
+
 ## Operação
 
 O deployment deve incluir health/readiness do Keycloak sem transformar indisponibilidade em bypass. Backups do banco do Keycloak e do banco do Dokpod são independentes e ambos precisam de testes de restauração. Atualizações seguem release notes, compatibilidade, migration, rollback, scan de vulnerabilidades e teste dos fluxos autenticados.

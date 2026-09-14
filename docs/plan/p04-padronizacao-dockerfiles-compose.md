@@ -2,7 +2,7 @@
 
 **Status:** approved  
 **Data de criação:** 2026-09-11  
-**Última atualização:** 2026-09-11  
+**Última atualização:** 2026-09-13  
 **Responsáveis:** Lincoln Zocateli  
 **Origem:** IA assistida  
 **Revisor humano:** Lincoln Zocateli  
@@ -18,6 +18,9 @@ Garantir a unicidade, paridade e coerência da stack do Dokpod entre o ambiente 
 - O ambiente de desenvolvimento deve refletir com fidelidade as restrições e imagens do ambiente de produção (dev-prod parity), utilizando como base as imagens homologadas em `lzocateli/containers`.
 - Para evitar duplicação de regras de build e manter uma fonte única de verdade (Single Source of Truth), os Dockerfiles serão estruturados como **multi-stage builds**, fornecendo targets reutilizáveis tanto para desenvolvimento quanto para o runtime final de produção.
 - O browser nunca se comunica diretamente com a API do plano de controle: a SPA Angular conversa com o BFF, que realiza o relay para a API e interage com o Keycloak para autenticação OIDC confidencial.
+- O avanço atual do BFF já implementou a sessão server-side, a autenticação OIDC e a rota de login/logout do browser; a próxima etapa funcional é o relay autenticado para `GET/POST/PUT/DELETE/PATCH` na API, além do ponto de entrada WebSocket/SignalR sob o mesmo guard.
+- A dependência funcional restante é a existência de endpoints HTTP versionados da API (`/api/v1`) e do hub SignalR (`/hubs`) que o BFF possa encaminhar sem expor tokens ao browser.
+- A implementação posterior do BFF deve seguir o plano dedicado [P05 - BFF, Keycloak e relay seguro do browser](p05-bff-keycloak-relay.md), que define o contrato, as invariantes de não exposição de tokens, os testes e os gates de release.
 
 ## Estrutura dos Dockerfiles Multi-Stage
 
@@ -104,3 +107,8 @@ flowchart TD
 2. **P04-02**: Atualizar os Dockerfiles existentes (`web`, `api`, `agent`) para padronizar as etapas multi-stage (`build`, `dev`, `publish`, `runtime`).
 3. **P04-03**: Criar o arquivo `deploy/dev/docker-compose.yaml` integrando toda a stack (`postgres`, `keycloak`, `api`, `bff`, `web`, `proxy`, `agent`).
 4. **P04-04**: Validar o startup da stack em desenvolvimento, verificando conectividade mTLS do agente, login OIDC via BFF e saúde dos serviços.
+5. **P04-05**: Implementar o relay autenticado do BFF para a API (`/api/v1/{**path}`) e para o hub SignalR/WebSocket (`/hubs/{**path}`), incluindo envio do access token da sessão, headers permitidos e proteção de Origin/CSRF.
+6. **P04-06**: Integrar a SPA Angular ao BFF para obter sessão, iniciar login/logout, carregar o antiforgery e explodir apenas as rotas do backend através do proxy do BFF.
+7. **P04-07**: Validar a integração real ponta a ponta com Keycloak e API pública, cobrindo falhas de token expirado, autorização horizontal, erro 401/403, indisponibilidade do downstream e reinício de sessão.
+
+O detalhamento funcional e de segurança dessas etapas está no plano [P05 - BFF, Keycloak e relay seguro do browser](p05-bff-keycloak-relay.md). Este plano P04 permanece responsável pela paridade de imagens, Compose, NGINX e operação da stack.

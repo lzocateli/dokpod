@@ -1,1 +1,20 @@
+<main class="shell">
+  <h1>Dokpod</h1>
+
+  <section>
+    <p>Autenticação e sessão do browser via BFF.</p>
+
+    @if (loading) {
+      <p>Carregando sessão…</p>
+    } @else if (errorMessage) {
+      <p class="error">{{ errorMessage }}</p>
+    } @else if (session?.authenticated) {
+      <p>Conectado como <strong>{{ session.name ?? session.subject ?? 'usuário' }}</strong>.</p>
+      <button type="button" (click)="loadSession()">Atualizar sessão</button>
+    } @else {
+      <button type="button" (click)="login()">Entrar com Keycloak</button>
+    }
+  </section>
+</main>
+
 <router-outlet />

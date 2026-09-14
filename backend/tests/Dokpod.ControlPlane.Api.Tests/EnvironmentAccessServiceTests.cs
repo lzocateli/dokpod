@@ -256,6 +256,7 @@ public sealed class EnvironmentAccessServiceTests
             string resource,
             string scope,
             AuthenticatedActor actor,
+            string accessToken,
             Guid correlationId,
             CancellationToken cancellationToken)
         {
@@ -273,6 +274,7 @@ public sealed class EnvironmentAccessServiceTests
             string resource,
             string scope,
             AuthenticatedActor actor,
+            string accessToken,
             Guid correlationId,
             CancellationToken cancellationToken)
         {
@@ -286,6 +288,7 @@ public sealed class EnvironmentAccessServiceTests
             string resource,
             string scope,
             AuthenticatedActor actor,
+            string accessToken,
             Guid correlationId,
             CancellationToken cancellationToken)
         {

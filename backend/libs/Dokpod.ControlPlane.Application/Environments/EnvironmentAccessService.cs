@@ -13,10 +13,26 @@ public sealed class EnvironmentAccessService(
     IAuditEventWriter auditEventWriter,
     IEnvironmentAuthorizationDecider authorizationDecider)
 {
+    public Task<EnvironmentAccessDecisionResult> RegisterAsync(
+        EnvironmentRegistration registration,
+        string requiredScope,
+        AuthenticatedActor actor,
+        AuditActorKind actorKind,
+        Guid correlationId,
+        CancellationToken cancellationToken) => RegisterAsync(
+            registration,
+            requiredScope,
+            actor,
+            string.Empty,
+            actorKind,
+            correlationId,
+            cancellationToken);
+
     public async Task<EnvironmentAccessDecisionResult> RegisterAsync(
         EnvironmentRegistration registration,
         string requiredScope,
         AuthenticatedActor actor,
+        string accessToken,
         AuditActorKind actorKind,
         Guid correlationId,
         CancellationToken cancellationToken)
@@ -31,6 +47,7 @@ public sealed class EnvironmentAccessService(
                 $"urn:dokpod:environment:{registration.EnvironmentId:D}",
                 requiredScope,
                 actor,
+                accessToken,
                 correlationId,
                 cancellationToken).ConfigureAwait(false);
         }

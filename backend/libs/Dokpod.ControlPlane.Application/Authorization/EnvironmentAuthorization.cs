@@ -33,6 +33,7 @@ public interface IEnvironmentAuthorizationDecider
         string resource,
         string scope,
         AuthenticatedActor actor,
+        string accessToken,
         Guid correlationId,
         CancellationToken cancellationToken);
 }

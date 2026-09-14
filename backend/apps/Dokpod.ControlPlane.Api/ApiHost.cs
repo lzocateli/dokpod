@@ -9,6 +9,14 @@ using Dokpod.ControlPlane.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
+using Dokpod.ControlPlane.Api.Realtime;
+using Dokpod.ControlPlane.Api.Authorization;
+using Dokpod.ControlPlane.Application.Authorization;
+using System.Security.Claims;
 
 namespace Dokpod.ControlPlane.Api;
 
@@ -65,6 +73,31 @@ public static class ApiHost
             options.MaxReceiveMessageSize = 1_048_576;
             options.MaxSendMessageSize = 1_048_576;
         });
+        var authority = builder.Configuration["Authentication:Keycloak:Authority"];
+        var audience = builder.Configuration["Authentication:Keycloak:Audience"];
+        builder.Services.AddOptions<KeycloakAuthorizationOptions>()
+            .BindConfiguration(KeycloakAuthorizationOptions.SectionName)
+            .ValidateOnStart();
+        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.Authority = authority;
+                options.Audience = audience;
+                options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+                options.MapInboundClaims = false;
+            });
+        builder.Services.AddAuthorizationBuilder()
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build());
+        builder.Services.AddSignalR();
+        builder.Services.AddSingleton<IValidateOptions<KeycloakAuthorizationOptions>, KeycloakAuthorizationOptionsValidator>();
+        builder.Services.AddHttpClient<IEnvironmentAuthorizationDecider, KeycloakAuthorizationDecisionService>(
+            (provider, client) =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(
+                provider.GetRequiredService<IOptions<KeycloakAuthorizationOptions>>().Value.DecisionTimeoutSeconds);
+        });
         builder.Services.AddHealthChecks()
             .AddCheck("controlplane-api", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["ready"]);
         builder.Services.AddSingleton<IAgentIdentityRegistry, EnvironmentVariableAgentIdentityRegistry>();
@@ -92,6 +125,13 @@ public static class ApiHost
         {
             Predicate = registration => registration.Tags.Contains("ready"),
         }).AllowAnonymous();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapGet("/api/v1/session", (ClaimsPrincipal principal) => Results.Ok(new
+        {
+            subject = principal.FindFirstValue("sub")
+        })).RequireAuthorization();
+        app.MapHub<ControlPlaneHub>("/hubs/control-plane").RequireAuthorization();
     }
 
     private static ApiHostOptions LoadOptionsFromEnvironment()

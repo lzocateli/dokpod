@@ -31,7 +31,8 @@ public sealed class BffCompositionTests
         Assert.Contains("/bff/logout", routes);
         Assert.Contains("/bff/session", routes);
         Assert.Contains("/bff/antiforgery", routes);
-        Assert.DoesNotContain("/api/{**path}", routes);
+        Assert.Contains("/api/v1/{**path}", routes);
+        Assert.Contains("/hubs/{**path}", routes);
         Assert.Equal("login", loginEndpoint.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName);
     }
 

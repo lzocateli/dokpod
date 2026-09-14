@@ -6,6 +6,10 @@ public sealed class DownstreamApiOptionsValidator(IHostEnvironment environment) 
 {
     public ValidateOptionsResult Validate(string? name, DownstreamApiOptions options)
     {
+        if (options.TimeoutSeconds <= 0
+            || options.MaxRequestContentLengthBytes <= 0
+            || options.MaxResponseContentLengthBytes <= 0)
+            return ValidateOptionsResult.Fail("Timeout e limites de corpo do downstream devem ser positivos.");
         if (string.IsNullOrWhiteSpace(options.BaseUrl)) return ValidateOptionsResult.Success;
         if (!Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUrl)
             || !string.IsNullOrEmpty(baseUrl.Query) || !string.IsNullOrEmpty(baseUrl.Fragment))

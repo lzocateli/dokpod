@@ -103,6 +103,21 @@ public static class BffHost
             var keycloak = provider.GetRequiredService<IOptions<KeycloakOptions>>().Value;
             return KeycloakHttpMessageHandlerFactory.Create(keycloak.Authority);
         });
+        builder.Services.AddHttpClient("dokpod-bff-downstream", client =>
+        {
+            var downstream = builder.Configuration
+                .GetSection(DownstreamApiOptions.SectionName)
+                .Get<DownstreamApiOptions>() ?? new();
+            client.BaseAddress = string.IsNullOrWhiteSpace(downstream.BaseUrl)
+                ? new Uri("https://localhost")
+                : new Uri(downstream.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(downstream.TimeoutSeconds);
+            client.MaxResponseContentBufferSize = runtime.DownstreamApiMaxResponseContentBufferSize;
+        }).ConfigurePrimaryHttpMessageHandler(_ => new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false,
+        });
         return builder;
     }
 
@@ -111,6 +126,7 @@ public static class BffHost
         app.UseForwardedHeaders();
         app.UseHttpsRedirection();
         app.UseRateLimiter();
+        app.UseWebSockets();
         app.UseMiddleware<OriginValidationMiddleware>();
         app.UseAuthentication();
         app.UseAuthorization();
@@ -134,6 +150,35 @@ public static class BffHost
         }).RequireAuthorization();
         endpoints.MapGet("/bff/session", (HttpContext context) =>
             Results.Ok(BffSessionResponse.FromPrincipal(context.User))).AllowAnonymous();
+        endpoints.MapMethods("/api/v1/{**path}", [HttpMethods.Get, HttpMethods.Head, HttpMethods.Options], async (HttpContext context, IHttpClientFactory httpClientFactory) =>
+            await DownstreamProxy.ProxyAsync(context, httpClientFactory, context.RequestServices.GetRequiredService<IOptions<DownstreamApiOptions>>()))
+            .RequireAuthorization();
+        endpoints.MapMethods("/api/v1/{**path}", [HttpMethods.Post, HttpMethods.Put, HttpMethods.Delete, HttpMethods.Patch], async (HttpContext context, IHttpClientFactory httpClientFactory) =>
+            await DownstreamProxy.ProxyAsync(context, httpClientFactory, context.RequestServices.GetRequiredService<IOptions<DownstreamApiOptions>>()))
+            .RequireAuthorization()
+            .AddEndpointFilter(async (invocationContext, next) =>
+            {
+                await invocationContext.HttpContext.RequestServices
+                    .GetRequiredService<IAntiforgery>()
+                    .ValidateRequestAsync(invocationContext.HttpContext);
+                return await next(invocationContext);
+            });
+        endpoints.MapGet("/hubs/{**path}", async (HttpContext context, IHttpClientFactory httpClientFactory) =>
+            await DownstreamProxy.ProxyAsync(context, httpClientFactory, context.RequestServices.GetRequiredService<IOptions<DownstreamApiOptions>>()))
+            .RequireAuthorization();
+        endpoints.MapPost("/hubs/{**path}", async (HttpContext context, IHttpClientFactory httpClientFactory) =>
+            await DownstreamProxy.ProxyAsync(
+                context,
+                httpClientFactory,
+                context.RequestServices.GetRequiredService<IOptions<DownstreamApiOptions>>()))
+            .RequireAuthorization()
+            .AddEndpointFilter(async (invocationContext, next) =>
+            {
+                await invocationContext.HttpContext.RequestServices
+                    .GetRequiredService<IAntiforgery>()
+                    .ValidateRequestAsync(invocationContext.HttpContext);
+                return await next(invocationContext);
+            });
         endpoints.MapPost("/bff/logout", async (IAntiforgery antiforgery, HttpContext context) =>
         {
             await antiforgery.ValidateRequestAsync(context);
