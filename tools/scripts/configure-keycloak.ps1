@@ -16,12 +16,14 @@ URL externa do Keycloak, sem barra final. Padrão: http://localhost:8080.
 Realm administrado. Padrão: dokpod.
 
 .PARAMETER AdminUsername
-Usuário administrativo da instância compartilhada. Padrão: DOKPOD_KEYCLOAK_ADMIN_USERNAME,
-ALTIVY_KEYCLOAK_ADMIN_USERNAME ou admin.
+Usuário bootstrap do realm master. Usado somente com -Bootstrap.
 
 .PARAMETER AdminPassword
-SecureString administrativo. Quando omitido, lê DOKPOD_KEYCLOAK_ADMIN_PASSWORD ou
-ALTIVY_KEYCLOAK_ADMIN_PASSWORD.
+SecureString de bootstrap. Usado somente com -Bootstrap.
+
+.PARAMETER Bootstrap
+Usa temporariamente a credencial do realm master para criar o realm. O uso
+cotidiano deve usar DOKPOD_PROVISIONER_CLIENT_SECRET.
 
 .PARAMETER InitialUserEmail
 E-mail do usuário inicial do laboratório. Quando omitido, usa DOKPOD_ADMIN_EMAIL;
@@ -63,8 +65,8 @@ Requer PowerShell 7.4 ou superior e Keycloak 26.7.0. O fluxo funcional requer
 acesso HTTPS ao Keycloak e uma conta com permissão para administrar o realm.
 Use um cofre para injetar DOKPOD_KEYCLOAK_ADMIN_PASSWORD, DOKPOD_BFF_CLIENT_SECRET,
 DOKPOD_PROVISIONER_CLIENT_SECRET, DOKPOD_SMTP_PASSWORD e DOKPOD_IDP_<PROVEDOR>_CLIENT_SECRET.
-Em laboratório compartilhado, as credenciais administrativas ALTIVY_KEYCLOAK_ADMIN_USERNAME
-e ALTIVY_KEYCLOAK_ADMIN_PASSWORD também são aceitas para operar a mesma instância.
+O fluxo cotidiano não usa credenciais do realm master. O bootstrap inicial da
+instância é responsabilidade da plataforma global de identidade.
 
 .LINK
 ../../docs/configuracao-keycloak.md
@@ -81,11 +83,13 @@ param(
 
     [SecureString] $AdminPassword,
 
+    [switch] $Bootstrap,
+
     [ValidatePattern('^[^@\s]+@[^@\s]+\.[^@\s]+$')]
     [string] $InitialUserEmail,
 
     [ValidatePattern('^https?://')]
-    [string] $BffBaseUrl = 'https://localhost:7443',
+    [string] $BffBaseUrl = 'https://localhost:7443/dokpod',
 
     [switch] $SkipUser,
 
@@ -151,7 +155,6 @@ function Import-LocalEnvironment {
     }
 
     Import-EnvironmentFile -Path (Join-Path $env:APPDATA 'Microsoft/UserSecrets/Dokpod/.env')
-    Import-EnvironmentFile -Path (Join-Path $env:APPDATA 'Microsoft/UserSecrets/Altivy.Notes/.env')
 }
 
 function Get-EnvironmentSecret {
@@ -170,17 +173,17 @@ function Get-EnvironmentSecret {
 Import-LocalEnvironment
 
 if (-not $PSBoundParameters.ContainsKey('Realm')) {
-    $configuredRealm = Get-EnvironmentSecret @('ALTIVY_KEYCLOAK_REALM')
+    $configuredRealm = Get-EnvironmentSecret @('KEYCLOAK_REALM')
     if ($configuredRealm -eq 'dokpod') {
         $Realm = $configuredRealm
     }
     elseif ($configuredRealm -and $configuredRealm -ne 'dokpod') {
-        Write-Warning "Ignorando ALTIVY_KEYCLOAK_REALM=$configuredRealm no script do Dokpod; use -Realm dokpod para alterar explicitamente."
+        Write-Warning "Ignorando KEYCLOAK_REALM=$configuredRealm no script do Dokpod; use -Realm dokpod para alterar explicitamente."
     }
 }
 
 if (-not $PSBoundParameters.ContainsKey('AdminUsername')) {
-    $AdminUsername = Get-EnvironmentSecret @('DOKPOD_KEYCLOAK_ADMIN_USERNAME', 'ALTIVY_KEYCLOAK_ADMIN_USERNAME')
+    $AdminUsername = Get-EnvironmentSecret @('DOKPOD_KEYCLOAK_ADMIN_USERNAME')
     if (-not $AdminUsername) { $AdminUsername = 'admin' }
 }
 if (-not $SkipUser -and -not $PSBoundParameters.ContainsKey('InitialUserEmail')) {
@@ -192,7 +195,7 @@ if (-not $SkipUser -and -not $PSBoundParameters.ContainsKey('InitialUserEmail'))
 
 $plannedResources = @(
     "realm $Realm e políticas de segurança",
-    'clients dokpod-api, dokpod-provisioner, dokpod-bff e dokpod-authorization-spike',
+    'clients dokpod-api, dokpod-provisioner, dokpod-bff, dokpod-lab e dokpod-authorization-spike',
     'client scope e mapper de audience dokpod-api',
     'roles Administrator, Operator, Auditor e Reader',
     'grupos /dokpod/administrators, /dokpod/operators, /dokpod/auditors e /dokpod/readers',
@@ -209,12 +212,15 @@ if ($DryRun) {
     exit 0
 }
 
-if (-not $AdminPassword) {
-    $adminPasswordValue = Get-EnvironmentSecret @('DOKPOD_KEYCLOAK_ADMIN_PASSWORD', 'ALTIVY_KEYCLOAK_ADMIN_PASSWORD')
+if ($Bootstrap -and -not $AdminPassword) {
+    $adminPasswordValue = Get-EnvironmentSecret @('DOKPOD_KEYCLOAK_ADMIN_PASSWORD')
     if (-not $adminPasswordValue) {
-        throw 'Defina DOKPOD_KEYCLOAK_ADMIN_PASSWORD, ALTIVY_KEYCLOAK_ADMIN_PASSWORD ou informe -AdminPassword. Use --help para detalhes.'
+        throw 'Defina DOKPOD_KEYCLOAK_ADMIN_PASSWORD ou informe -AdminPassword. Use --help para detalhes.'
     }
     $AdminPassword = ConvertTo-SecureString $adminPasswordValue -AsPlainText -Force
+}
+if (-not $Bootstrap -and ($PSBoundParameters.ContainsKey('AdminUsername') -or $PSBoundParameters.ContainsKey('AdminPassword'))) {
+    throw 'AdminUsername/AdminPassword só podem ser usados com -Bootstrap.'
 }
 
 function ConvertFrom-SecureValue {
@@ -255,8 +261,8 @@ function Invoke-KeycloakApi {
         }
         catch {
             $statusCode = $_.Exception.Response.StatusCode.value__
-            if ($statusCode -eq 401 -and $attempt -eq 0 -and $script:adminPasswordPlain) {
-                Request-MasterAccessToken
+            if ($statusCode -eq 401 -and $attempt -eq 0 -and ($script:adminPasswordPlain -or $script:provisionerSecret)) {
+                Request-AccessToken
                 $parameters.Headers.Authorization = "Bearer $script:accessToken"
                 continue
             }
@@ -292,17 +298,18 @@ function Assert-TemporaryPasswordPolicy {
     }
 }
 
-function Request-MasterAccessToken {
+function Request-AccessToken {
+    $tokenBody = if ($Bootstrap) {
+        @{ grant_type = 'password'; client_id = 'admin-cli'; username = $AdminUsername; password = $script:adminPasswordPlain }
+    }
+    else {
+        @{ grant_type = 'client_credentials'; client_id = 'dokpod-provisioner'; client_secret = $script:provisionerSecret }
+    }
     $tokenParameters = @{
         Method      = 'POST'
-        Uri         = "$BaseUrl/realms/master/protocol/openid-connect/token"
+        Uri         = "$BaseUrl/realms/$(if ($Bootstrap) { 'master' } else { $Realm })/protocol/openid-connect/token"
         ContentType = 'application/x-www-form-urlencoded'
-        Body        = @{
-            grant_type = 'password'
-            client_id  = 'admin-cli'
-            username   = $AdminUsername
-            password   = $script:adminPasswordPlain
-        }
+        Body        = $tokenBody
         ErrorAction = 'Stop'
     }
     if ($useNoProxy) { $tokenParameters.NoProxy = $true }
@@ -319,13 +326,13 @@ function Ensure-Client {
     Where-Object clientId -eq $Representation.clientId | Select-Object -First 1
     if ($existing) {
         Invoke-KeycloakApi PUT "/admin/realms/$Realm/clients/$($existing.id)" $Representation | Out-Null
-        Write-Output "Atualizado client $($Representation.clientId)."
+        Write-Verbose "Atualizado client $($Representation.clientId)."
         return $existing.id
     }
 
     Invoke-KeycloakApi POST "/admin/realms/$Realm/clients" $Representation | Out-Null
     $createdId = Get-CreatedResourceId
-    Write-Output "Criado client $($Representation.clientId)."
+    Write-Verbose "Criado client $($Representation.clientId)."
     $createdId
 }
 
@@ -470,9 +477,16 @@ function Ensure-IdentityProvider {
 
 $script:accessToken = $null
 $script:lastResponseHeaders = $null
-$script:adminPasswordPlain = ConvertFrom-SecureValue $AdminPassword
+$script:adminPasswordPlain = $null
+$script:provisionerSecret = Get-EnvironmentSecret @('DOKPOD_PROVISIONER_CLIENT_SECRET')
+if ($Bootstrap) {
+    $script:adminPasswordPlain = ConvertFrom-SecureValue $AdminPassword
+}
+elseif (-not $script:provisionerSecret) {
+    throw 'Defina DOKPOD_PROVISIONER_CLIENT_SECRET para a reconciliação cotidiana ou use -Bootstrap explicitamente.'
+}
 try {
-    Request-MasterAccessToken
+    Request-AccessToken
 }
 finally {
     $script:adminPasswordPlain = $script:adminPasswordPlain
@@ -562,6 +576,16 @@ $authorizationSpikeClient = @{
 }
 $authorizationSpikeClientUuid = Ensure-Client $authorizationSpikeClient
 Ensure-AudienceClientScope -ClientUuid $authorizationSpikeClientUuid
+
+$labClient = @{
+    clientId = 'dokpod-lab'; name = 'Dokpod Lab'; enabled = $true
+    publicClient = $true; standardFlowEnabled = $true; implicitFlowEnabled = $false
+    directAccessGrantsEnabled = $false; serviceAccountsEnabled = $false; protocol = 'openid-connect'
+    redirectUris = @('http://localhost:8080/', 'http://localhost:8765/callback/', 'http://127.0.0.1:8765/callback/'); webOrigins = @('http://localhost:8080')
+    attributes = @{ 'pkce.code.challenge.method' = 'S256'; 'oauth2.device.authorization.grant.enabled' = 'false' }
+}
+$labClientUuid = Ensure-Client $labClient
+Ensure-AudienceClientScope -ClientUuid $labClientUuid
 
 $roles = @(
     @{ name = 'Administrator'; description = 'Administra ambientes, auditoria e recursos Dokpod explicitamente autorizados.'; group = 'administrators' },

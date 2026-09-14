@@ -1,0 +1,224 @@
+<#
+.SYNOPSIS
+Provisiona autorização UMA de um ambiente Dokpod para um usuário ou grupo.
+
+.DESCRIPTION
+Cria ou reutiliza o recurso `urn:dokpod:environment:{EnvironmentId}` no
+Authorization Services do client `dokpod-api`, encontra um usuário ou grupo do
+realm `dokpod`, cria uma policy e cria permissions resource por scope.
+
+A operação é administrativa e idempotente. O runtime da API somente consulta
+decisões UMA; ele não cria policies nem usa credencial administrativa.
+
+.PARAMETER EnvironmentId
+GUID opaco e estável do ambiente Dokpod.
+
+.PARAMETER OwnerUsername
+Usuário existente no realm que receberá a policy. Exclusivo com GroupPath.
+
+.PARAMETER GroupPath
+Grupo existente, por exemplo `/dokpod/administrators`. Exclusivo com OwnerUsername.
+
+.PARAMETER Scope
+Scope a conceder. Padrão: environment:read.
+
+.PARAMETER BaseUrl
+URL do Keycloak sem barra final. Padrão: http://localhost:8080.
+
+.PARAMETER Realm
+Realm administrado. Padrão: dokpod.
+
+.PARAMETER DryRun
+Exibe o plano sem acessar a rede, solicitar credenciais ou alterar o Keycloak.
+
+.PARAMETER RemainingArguments
+Aceita somente --help.
+
+.EXAMPLE
+./tools/scripts/provision-environment-authorization.ps1 --help
+
+.EXAMPLE
+./tools/scripts/provision-environment-authorization.ps1 `
+  -EnvironmentId 00000000-0000-0000-0000-000000000001 `
+  -GroupPath /dokpod/administrators `
+  -Scope environment:read
+
+.EXAMPLE
+./tools/scripts/provision-environment-authorization.ps1 `
+  -EnvironmentId 00000000-0000-0000-0000-000000000001 `
+  -OwnerUsername dokpod-admin `
+  -DryRun
+
+.NOTES
+Requer PowerShell 7.4+ e DOKPOD_PROVISIONER_CLIENT_SECRET injetado por ambiente
+seguro. Não leia ou copie arquivos de secrets para este repositório. A
+credencial de provisionamento não é usada pelo runtime da API.
+
+.LINK
+../../docs/configuracao-keycloak.md
+#>
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [ValidatePattern('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')]
+    [string] $EnvironmentId = '',
+
+    [ValidatePattern('^[^\s]+$')]
+    [string] $OwnerUsername,
+
+    [ValidatePattern('^/dokpod/[a-z]+$')]
+    [string] $GroupPath,
+
+    [ValidateSet('environment:read', 'environment:manage', 'container:start', 'container:stop', 'container:restart', 'container:delete', 'audit:read')]
+    [string] $Scope = 'environment:read',
+
+    [ValidatePattern('^https?://')]
+    [string] $BaseUrl = 'http://localhost:8080',
+
+    [ValidatePattern('^[a-z0-9-]+$')]
+    [string] $Realm = 'dokpod',
+
+    [switch] $DryRun,
+
+    [Parameter(ValueFromRemainingArguments)]
+    [string[]] $RemainingArguments
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$RemainingArguments = @($RemainingArguments | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+$BaseUrl = $BaseUrl.TrimEnd('/')
+$baseUri = [Uri]$BaseUrl
+$useNoProxy = $baseUri.IsLoopback
+$resourceName = "urn:dokpod:environment:$EnvironmentId"
+$clientId = 'dokpod-api'
+
+if ($RemainingArguments -contains '--help') { Get-Help $PSCommandPath -Full; exit 0 }
+if ($RemainingArguments.Count -gt 0) { throw "Argumento desconhecido: $($RemainingArguments -join ' '). Use --help." }
+if ([string]::IsNullOrWhiteSpace($EnvironmentId)) { throw 'EnvironmentId é obrigatório. Use --help.' }
+if ($Realm -eq 'master') { throw 'O realm master não pode ser administrado por este script.' }
+if ([string]::IsNullOrWhiteSpace($OwnerUsername) -and [string]::IsNullOrWhiteSpace($GroupPath)) { throw 'Informe OwnerUsername ou GroupPath.' }
+if (-not [string]::IsNullOrWhiteSpace($OwnerUsername) -and -not [string]::IsNullOrWhiteSpace($GroupPath)) { throw 'OwnerUsername e GroupPath são exclusivos.' }
+if ($baseUri.Scheme -ne 'https' -and -not $baseUri.IsLoopback) { throw 'BaseUrl deve usar HTTPS fora do ambiente local.' }
+
+if ($DryRun) {
+    [pscustomobject]@{
+        realm = $Realm
+        client = $clientId
+        resource = $resourceName
+        scope = $Scope
+        subject = if ($OwnerUsername) { "user:$OwnerUsername" } else { "group:$GroupPath" }
+        operations = @('find-client', 'find-scope', 'create-or-reuse-resource', 'create-or-reuse-policy', 'create-or-reuse-permission')
+    } | ConvertTo-Json -Depth 3
+    exit 0
+}
+
+function Import-EnvironmentFile {
+    param([Parameter(Mandatory)][string] $Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ($line -match '^\s*(?:export\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<value>.*)\s*$') {
+            $name = $Matches.name
+            if (-not [Environment]::GetEnvironmentVariable($name, 'Process')) {
+                $value = $Matches.value.Trim()
+                if ($value.Length -ge 2 -and $value[0] -eq '"' -and $value[$value.Length - 1] -eq '"') {
+                    $value = $value.Substring(1, $value.Length - 2)
+                }
+                elseif ($value.Length -ge 2 -and $value[0] -eq "'" -and $value[$value.Length - 1] -eq "'") {
+                    $value = $value.Substring(1, $value.Length - 2)
+                }
+                [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+            }
+        }
+    }
+}
+
+function Import-LocalEnvironment {
+    if ([string]::IsNullOrWhiteSpace($env:APPDATA)) { return }
+
+    Import-EnvironmentFile -Path (Join-Path $env:APPDATA 'Microsoft/UserSecrets/Dokpod/.env')
+}
+
+function Get-EnvironmentSecret {
+    param([Parameter(Mandatory)][string[]] $Names)
+    foreach ($name in $Names) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) { return $value }
+    }
+    return $null
+}
+
+Import-LocalEnvironment
+$provisionerSecret = Get-EnvironmentSecret @('DOKPOD_PROVISIONER_CLIENT_SECRET')
+if ([string]::IsNullOrWhiteSpace($provisionerSecret)) { throw 'Defina DOKPOD_PROVISIONER_CLIENT_SECRET em ambiente seguro.' }
+
+function Invoke-Api {
+    param([ValidateSet('GET','POST')][string] $Method, [string] $Uri, [object] $Body)
+    $parameters = @{ Method = $Method; Uri = $Uri; Headers = @{ Authorization = "Bearer $script:accessToken" }; ErrorAction = 'Stop' }
+    if ($null -ne $Body) { $parameters.ContentType = 'application/json'; $parameters.Body = $Body | ConvertTo-Json -Depth 10 -Compress }
+    if ($useNoProxy) { $parameters.NoProxy = $true }
+    Invoke-RestMethod @parameters
+}
+
+function Find-One {
+    param([object[]] $Items, [string] $Description)
+    $matches = @($Items)
+    if ($matches.Count -ne 1) { throw "$Description deve resolver exatamente um resultado; encontrados $($matches.Count)." }
+    $matches[0]
+}
+
+$tokenParameters = @{ Method = 'Post'; Uri = "$BaseUrl/realms/$Realm/protocol/openid-connect/token"; ContentType = 'application/x-www-form-urlencoded'; Body = @{ grant_type = 'client_credentials'; client_id = 'dokpod-provisioner'; client_secret = $provisionerSecret }; ErrorAction = 'Stop' }
+if ($useNoProxy) { $tokenParameters.NoProxy = $true }
+$script:accessToken = (Invoke-RestMethod @tokenParameters).access_token
+if ([string]::IsNullOrWhiteSpace($script:accessToken)) { throw 'Keycloak não retornou token administrativo.' }
+
+$apiClient = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/clients?clientId=$clientId") "client $clientId"
+$authzBase = "$BaseUrl/admin/realms/$Realm/clients/$($apiClient.id)/authz/resource-server"
+$scopeRecord = Find-One (Invoke-Api GET "$authzBase/scope?name=$([Uri]::EscapeDataString($Scope))&exact=true") "scope $Scope"
+$resourceMatches = @(Invoke-Api GET "$authzBase/resource?name=$([Uri]::EscapeDataString($resourceName))&exactName=true") | Where-Object name -eq $resourceName
+if ($resourceMatches.Count -eq 0) {
+    $resource = Invoke-Api POST "$authzBase/resource" @{
+        name = $resourceName
+        displayName = "Dokpod environment $EnvironmentId"
+        scopes = @(@{ id = $scopeRecord.id; name = $Scope })
+        ownerManagedAccess = $false
+    }
+    Write-Output "Recurso UMA criado: $resourceName"
+}
+else { $resource = Find-One $resourceMatches "recurso $resourceName"; Write-Output "Recurso UMA já existe: $resourceName" }
+
+if ($OwnerUsername) {
+    $user = Find-One ((Invoke-Api GET "$BaseUrl/admin/realms/$Realm/users?username=$([Uri]::EscapeDataString($OwnerUsername))&exact=true") | Where-Object username -eq $OwnerUsername) "usuário $OwnerUsername"
+    $policyName = "environment-$EnvironmentId-owner-$OwnerUsername"
+    $policyType = 'user'
+    $policyBody = @{ name = $policyName; type = 'user'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'; users = @([string]$user.id) }
+}
+else {
+    $segments = $GroupPath.Trim('/').Split('/')
+    $parent = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups?search=$($segments[0])&exact=true" | Where-Object path -eq "/$($segments[0])") "grupo $($segments[0])"
+    for ($index = 1; $index -lt $segments.Count; $index++) {
+        $parent = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups/$($parent.id)/children?search=$($segments[$index])&exact=true" | Where-Object path -eq "/$($segments[0..$index] -join '/')") "grupo $GroupPath"
+    }
+    $policyName = "environment-$EnvironmentId-group-$($segments[-1])"
+    $policyType = 'group'
+    $policyBody = @{ name = $policyName; type = 'group'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'; groupsClaim = 'groups'; groups = @(@{ id = $parent.id; path = $GroupPath }) }
+}
+
+$policies = @(Invoke-Api GET "$authzBase/policy?name=$([Uri]::EscapeDataString($policyName))") | Where-Object name -eq $policyName
+if ($policies.Count -eq 0) { $policy = Invoke-Api POST "$authzBase/policy/$policyType" $policyBody; Write-Output "Policy UMA criada: $policyName" }
+else { $policy = Find-One $policies "policy $policyName"; Write-Output "Policy UMA já existe: $policyName" }
+
+$permissionName = "environment-$EnvironmentId-$($Scope.Replace(':','-'))"
+$permissions = @(Invoke-Api GET "$authzBase/permission?name=$([Uri]::EscapeDataString($permissionName))") | Where-Object name -eq $permissionName
+if ($permissions.Count -eq 0) {
+    Invoke-Api POST "$authzBase/permission/resource" @{
+        name = $permissionName; type = 'resource'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'
+        resources = @([string]$resource._id); scopes = @([string]$scopeRecord.id); policies = @([string]$policy.id)
+    } | Out-Null
+    Write-Output "Permission UMA criada: $permissionName"
+}
+else { Write-Output "Permission UMA já existe: $permissionName" }
+
+Remove-Variable adminPassword, accessToken -Scope Script -ErrorAction SilentlyContinue
+Write-Output 'Provisionamento UMA concluído.'

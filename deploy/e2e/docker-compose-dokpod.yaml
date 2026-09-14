@@ -13,7 +13,7 @@ services:
         ipv4_address: 172.32.0.10
         aliases:
           - dokpod-web
-      altivy-edge:
+      identity-global:
         aliases:
           - dokpod-web
 
@@ -40,9 +40,36 @@ services:
         ipv4_address: 172.32.0.20
         aliases:
           - dokpod-api
-      altivy-edge:
+      identity-global:
         aliases:
           - dokpod-api
+
+  bff:
+    build:
+      context: ../..
+      dockerfile: backend/apps/Dokpod.Bff/Dockerfile
+    image: dokpod-bff:e2e
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Authentication__Keycloak__Authority: ${KEYCLOAK_PUBLIC_URL:-https://localhost:7443}/realms/${KEYCLOAK_REALM:-dokpod}
+      Authentication__Keycloak__ClientId: dokpod-bff
+      Authentication__Keycloak__ClientSecret: ${KEYCLOAK_BFF_CLIENT_SECRET:?Defina KEYCLOAK_BFF_CLIENT_SECRET no secret externo}
+      Security__AllowedOrigins__0: https://localhost:7443
+      Downstream__Api__BaseUrl: http://api:8080
+    volumes:
+      - dokpod-bff-keys:/var/lib/dokpod-bff
+    depends_on:
+      api:
+        condition: service_started
+    restart: "no"
+    stop_grace_period: 20s
+    networks:
+      dokpod:
+        aliases:
+          - dokpod-bff
+      identity-global:
+        aliases:
+          - dokpod-bff
 
   agent:
     build:
@@ -70,6 +97,9 @@ networks:
     ipam:
       config:
         - subnet: 172.32.0.0/24
-  altivy-edge:
+  identity-global:
     external: true
-    name: altivy-edge
+    name: identity-global
+
+volumes:
+  dokpod-bff-keys:

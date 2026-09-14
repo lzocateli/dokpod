@@ -160,6 +160,42 @@ O resultado contém somente `iteration`, `outcome`, `statusCode` e `durationMs`.
 timeout ou JSON inválido são reportadas como `indeterminate` e retornam falha
 quando `-Expected allowed` ou `-Expected denied` não for atendido.
 
+## Provisionar recurso e permission UMA
+
+O script `tools/scripts/provision-environment-authorization.ps1` segue o
+padrão do AltivyNotes para cadastrar o recurso e ligar uma policy a uma
+permission do client `dokpod-api`. Ele usa credencial administrativa somente
+durante a reconciliação; a API em runtime não usa essa credencial.
+
+No desenvolvimento local, o script importa automaticamente as variáveis do
+arquivo externo `$env:APPDATA/Microsoft/UserSecrets/Dokpod/.env` e, como
+fallback de compatibilidade, `$env:APPDATA/Microsoft/UserSecrets/Altivy.Notes/.env`.
+Variáveis já presentes no processo têm precedência. A senha usada para a
+reconciliação é `DOKPOD_KEYCLOAK_ADMIN_PASSWORD` (ou o fallback
+`ALTIVY_KEYCLOAK_ADMIN_PASSWORD`); `DOKPOD_ADMIN_TEMPORARY_PASSWORD` é apenas
+a senha inicial do usuário de bootstrap.
+
+Para liberar leitura do ambiente ao grupo de administradores:
+
+```powershell
+./tools/scripts/provision-environment-authorization.ps1 `
+    -EnvironmentId 00000000-0000-0000-0000-000000000001 `
+    -GroupPath /dokpod/administrators `
+    -Scope environment:read
+```
+
+Para liberar diretamente um usuário:
+
+```powershell
+./tools/scripts/provision-environment-authorization.ps1 `
+    -EnvironmentId 00000000-0000-0000-0000-000000000001 `
+    -OwnerUsername dokpod-admin `
+    -Scope environment:read
+```
+
+Use `-DryRun` antes da alteração. O script é idempotente e não aceita
+simultaneamente `OwnerUsername` e `GroupPath`.
+
 ## Operação
 
 O deployment deve incluir health/readiness do Keycloak sem transformar indisponibilidade em bypass. Backups do banco do Keycloak e do banco do Dokpod são independentes e ambos precisam de testes de restauração. Atualizações seguem release notes, compatibilidade, migration, rollback, scan de vulnerabilidades e teste dos fluxos autenticados.

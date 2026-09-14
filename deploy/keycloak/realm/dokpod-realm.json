@@ -70,7 +70,9 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "http://localhost:8080/"
+        "http://localhost:8080/",
+        "http://localhost:8765/callback/",
+        "http://127.0.0.1:8765/callback/"
       ],
       "webOrigins": [
         "http://localhost:8080"

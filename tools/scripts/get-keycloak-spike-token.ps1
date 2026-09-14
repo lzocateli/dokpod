@@ -19,7 +19,7 @@ Client público de laboratório. Padrão: dokpod-lab.
 
 .PARAMETER RedirectUri
 Callback loopback previamente cadastrado no client. Padrão:
-http://127.0.0.1:8765/callback/.
+http://127.0.0.1:8765/callback/. Também aceita localhost.
 
 .PARAMETER EnvironmentId
 GUID do ambiente usado na decisão UMA.
@@ -74,7 +74,7 @@ param(
     [ValidatePattern('^[a-z0-9-]+$')]
     [string] $ClientId = 'dokpod-lab',
 
-    [ValidatePattern('^http://127\.0\.0\.1:[0-9]+/callback/$')]
+    [ValidatePattern('^http://(?:localhost|127\.0\.0\.1):[0-9]+/callback/$')]
     [string] $RedirectUri = 'http://127.0.0.1:8765/callback/',
 
     [ValidatePattern('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')]

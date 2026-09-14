@@ -1,8 +1,8 @@
 # Stack E2E do Dokpod
 
-Este diretório define a stack local do projeto Dokpod, consumindo a stack
-compartilhada `altivy-keycloak-lab` para NGINX, Keycloak e PostgreSQL. O Compose
-cria somente os serviços próprios do Dokpod que já existem no repositório.
+Este diretório define a stack local do projeto Dokpod, consumindo a plataforma
+global de identidade pela rede externa `identity-global`. O Compose cria os
+serviços próprios do Dokpod e não depende do checkout do AltivyNotes.
 
 ## Serviços
 
@@ -10,20 +10,17 @@ cria somente os serviços próprios do Dokpod que já existem no repositório.
 - `api`: API do plano de controle `dokpod-api:e2e`, com gRPC/mTLS na porta interna `7443` e health HTTP na porta interna `8080`;
 - `agent`: agente Linux opcional no perfil `agent`, com acesso explícito ao socket Docker local.
 
-O `nginx-proxy` compartilhado publica a Web do Dokpod pelo caminho
-`https://localhost:7443/dokpod/`. Essa topologia não exige alteração de DNS,
-arquivo `hosts` ou resolver local.
+O gateway global publica o Dokpod em `https://localhost:7443/dokpod/` e encaminha
+sessão, API e SignalR pelo BFF.
 
-O host `Dokpod.Bff` já possui código fonte versionado, mas ainda não entra nesta
-stack porque a API não publica a superfície HTTP versionada que o BFF deverá
-encaminhar. O BFF deve ser incluído somente junto com o relay server-side de
-`/api/v1` e `/hubs`, permanecendo como o único serviço chamado pela Web na rede
-`altivy-edge` com alias `dokpod-bff`.
+O `Dokpod.Bff` entra nesta stack como `dokpod-bff`, com Data Protection em
+volume próprio e API como upstream interno.
 
 ## Pré-requisitos
 
-- stack compartilhada `altivy-keycloak-lab` saudável, incluindo `altivy-nginx-proxy`, `altivy-keycloak` e `altivy-postresql`;
-- rede externa `altivy-edge` criada;
+- plataforma `altivy-identity` saudável;
+- rede externa `identity-global` criada;
+- `KEYCLOAK_BFF_CLIENT_SECRET` e demais valores no arquivo externo do Dokpod;
 - certificado PFX de laboratório para a API;
 - Docker Desktop com containers Linux.
 

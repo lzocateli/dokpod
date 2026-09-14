@@ -32,7 +32,7 @@ No realm `dokpod`, confirme no client de laboratório:
 - **Standard flow:** habilitado;
 - **Direct access grants:** desabilitado, salvo decisão explícita para laboratório;
 - **PKCE:** `S256`;
-- **Valid redirect URI:** exatamente `http://127.0.0.1:8765/callback/`;
+- **Valid redirect URI:** exatamente `http://127.0.0.1:8765/callback/` ou `http://localhost:8765/callback/`;
 - **Web origins:** somente a origem necessária ao laboratório;
 - **Audience:** o access token precisa conter `dokpod-api` quando for avaliado pela API.
 

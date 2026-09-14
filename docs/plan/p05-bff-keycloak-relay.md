@@ -316,6 +316,8 @@ O validator está ligado a `ValidateOnStart`, a `Authority` efetiva vem de `IOpt
 
 Foi criado `tools/scripts/test-keycloak-authorization-spike.ps1`, inspirado no script equivalente do AltivyNotes. Ele valida uma decisão UMA real contra o realm `dokpod`, aceita token efêmero por `SecureString` ou variável de processo, oferece `--help`/`-DryRun`, não lê arquivos de secrets e produz apenas resultado, status e latência. A execução real depende de recurso UMA provisionado, token de usuário válido e ambiente Keycloak autorizado; não foi executada nesta sessão.
 
+Foi criado também `tools/scripts/provision-environment-authorization.ps1`, inspirado em `provision-vault-owner-authorization.ps1` do AltivyNotes. Ele cria ou reutiliza o recurso `urn:dokpod:environment:{id}`, policy de usuário/grupo e permission para um scope, de forma idempotente. O `DryRun` foi validado; a execução real requer credencial administrativa externa.
+
 O adapter UMA é a ponte entre a porta `IEnvironmentAuthorizationDecider` da aplicação e o Keycloak Authorization Services. Ele existe para que cada operação seja decidida por recurso e scope, evitando confiar apenas em autenticação, role genérica ou claims copiadas localmente. O BFF mantém o token fora do browser; a API usa o token server-side para pedir a decisão; o domínio recebe apenas o resultado permitido/negado/indeterminado.
 
 Validação:

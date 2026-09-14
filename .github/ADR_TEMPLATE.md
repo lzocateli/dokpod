@@ -1,6 +1,6 @@
 # ADR AAAA-NNNN: Título da decisão
 
-**Status:** proposed  
+**Status:** approved  
 **Data:** AAAA-MM-DD  
 **Responsáveis:** nomes ou equipe  
 **Origem:** humano ou IA assistida  

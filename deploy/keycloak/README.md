@@ -171,11 +171,16 @@ Execute a partir da raiz do repositório:
 O script cria ou atualiza:
 
 - realm `dokpod` com login theme `dokpod`;
-- clients `dokpod-api`, `dokpod-provisioner`, `dokpod-bff` e `dokpod-authorization-spike`;
+- clients `dokpod-api`, `dokpod-provisioner`, `dokpod-bff`, `dokpod-lab` e `dokpod-authorization-spike`;
+- callbacks loopback `http://localhost:8765/callback/` e `http://127.0.0.1:8765/callback/` no client público `dokpod-lab`, além do redirect local existente `http://localhost:8080/`;
 - mapper de audience `dokpod-api` para os clients que chamam a API;
 - roles `Administrator`, `Operator`, `Auditor` e `Reader`;
 - grupos `/dokpod/administrators`, `/dokpod/operators`, `/dokpod/auditors` e `/dokpod/readers`;
 - SMTP e provedores sociais quando as variáveis correspondentes existirem.
+
+Depois de alterar clients ou callbacks, execute a reconciliação novamente. Ela
+preserva o redirect local do `dokpod-lab` e adiciona o callback usado por
+`tools/scripts/get-keycloak-spike-token.ps1`.
 
 ## Links locais
 
