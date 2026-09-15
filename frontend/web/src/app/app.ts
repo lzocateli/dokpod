@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
 interface BffSession {
@@ -17,32 +17,33 @@ interface BffSession {
 export class App implements OnInit {
   private readonly http = inject(HttpClient);
 
-  protected session: BffSession | null = null;
-  protected loading = true;
-  protected errorMessage: string | null = null;
+  protected readonly session = signal<BffSession | null>(null);
+  protected readonly loading = signal(true);
+  protected readonly errorMessage = signal<string | null>(null);
 
   ngOnInit(): void {
     this.loadSession();
   }
 
   protected loadSession(): void {
-    this.loading = true;
-    this.errorMessage = null;
+    this.loading.set(true);
+    this.errorMessage.set(null);
 
-    this.http.get<BffSession>('/bff/session').subscribe({
+    this.http.get<BffSession>('bff/session').subscribe({
       next: session => {
-        this.session = session;
-        this.loading = false;
+        this.session.set(session);
+        this.loading.set(false);
       },
       error: () => {
-        this.errorMessage = 'Não foi possível carregar a sessão do BFF.';
-        this.session = null;
-        this.loading = false;
+        this.errorMessage.set('Não foi possível carregar a sessão do BFF.');
+        this.session.set(null);
+        this.loading.set(false);
       },
     });
   }
 
   protected login(): void {
-    window.location.assign('/bff/login?returnUrl=/');
+    const returnUrl = `${window.location.pathname}${window.location.search}`;
+    window.location.assign(`bff/login?returnUrl=${encodeURIComponent(returnUrl)}`);
   }
 }

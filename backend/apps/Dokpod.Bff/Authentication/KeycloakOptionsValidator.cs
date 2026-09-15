@@ -14,7 +14,7 @@ public sealed class KeycloakOptionsValidator(IHostEnvironment environment) : IVa
             || !string.IsNullOrEmpty(authority.Query) || !string.IsNullOrEmpty(authority.Fragment))
             return ValidateOptionsResult.Fail("O BFF deve usar um realm Dokpod dedicado diferente de master.");
         if (!string.Equals(authority.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-            && !(environment.IsDevelopment() && authority.IsLoopback))
+            && !(environment.IsDevelopment() && authority.Scheme == Uri.UriSchemeHttp))
             return ValidateOptionsResult.Fail("O issuer do Keycloak deve usar HTTPS fora do desenvolvimento local.");
         if (string.IsNullOrWhiteSpace(options.ClientId) || string.IsNullOrWhiteSpace(options.ClientSecret))
             return ValidateOptionsResult.Fail("ClientId e ClientSecret do BFF são obrigatórios.");

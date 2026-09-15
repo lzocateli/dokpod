@@ -8,6 +8,7 @@ COPY backend/Directory.Build.props backend/Directory.Packages.props ./backend/
 COPY contracts/agent/ contracts/agent/
 COPY backend/libs/Dokpod.Agent.Contracts/Dokpod.Agent.Contracts.csproj backend/libs/Dokpod.Agent.Contracts/
 COPY backend/libs/Dokpod.ControlPlane.Application/Dokpod.ControlPlane.Application.csproj backend/libs/Dokpod.ControlPlane.Application/
+COPY backend/libs/Dokpod.ControlPlane.Infrastructure/Dokpod.ControlPlane.Infrastructure.csproj backend/libs/Dokpod.ControlPlane.Infrastructure/
 COPY backend/libs/Dokpod.Domain/Dokpod.Domain.csproj backend/libs/Dokpod.Domain/
 COPY backend/apps/Dokpod.ControlPlane.Api/Dokpod.ControlPlane.Api.csproj backend/apps/Dokpod.ControlPlane.Api/
 RUN dotnet restore backend/apps/Dokpod.ControlPlane.Api/Dokpod.ControlPlane.Api.csproj

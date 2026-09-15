@@ -6,5 +6,5 @@
   <path d="M35 40H45C51 40 54 43 54 48C54 53 51 56 45 56H35V40Z" fill="#b7f34a"/>
   <rect x="16" y="43" width="14" height="14" fill="#b7f34a" stroke="#0b1210" stroke-width="5"/>
   <text x="96" y="57" fill="#f4f7f5" font-family="Georgia, 'Times New Roman', serif" font-size="48" font-weight="700" letter-spacing="0">Dokpod</text>
-  <text x="99" y="80" fill="#b7f34a" font-family="Consolas, 'Courier New', monospace" font-size="12" font-weight="700" letter-spacing="0">CONTROLE LOCAL</text>
+  <text x="99" y="80" fill="#b7f34a" font-family="Consolas, 'Courier New', monospace" font-size="8" font-weight="700" letter-spacing="0">GOVERNE CADA ENGINE. VISUALIZE TODA A OPERAÇÃO.</text>
 </svg>

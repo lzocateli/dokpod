@@ -11,7 +11,8 @@ public sealed class ConfigureForwardedHeadersOptions(IOptions<BffSecurityOptions
     {
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
             | ForwardedHeaders.XForwardedHost
-            | ForwardedHeaders.XForwardedProto;
+            | ForwardedHeaders.XForwardedProto
+            | ForwardedHeaders.XForwardedPrefix;
         options.KnownProxies.Clear();
         options.KnownIPNetworks.Clear();
         foreach (var proxy in securityOptions.Value.TrustedProxies)

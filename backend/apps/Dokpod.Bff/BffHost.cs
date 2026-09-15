@@ -92,7 +92,9 @@ public static class BffHost
             .ConfigurePrimaryHttpMessageHandler(provider =>
             {
                 var keycloak = provider.GetRequiredService<IOptions<KeycloakOptions>>().Value;
-                return KeycloakHttpMessageHandlerFactory.Create(keycloak.Authority);
+                return KeycloakHttpMessageHandlerFactory.Create(
+                    keycloak.Authority,
+                    provider.GetRequiredService<IHostEnvironment>().IsDevelopment());
             });
         builder.Services.AddHttpClient(AccessTokenRefreshCoordinator.HttpClientName, client =>
         {
@@ -101,7 +103,9 @@ public static class BffHost
         }).ConfigurePrimaryHttpMessageHandler(provider =>
         {
             var keycloak = provider.GetRequiredService<IOptions<KeycloakOptions>>().Value;
-            return KeycloakHttpMessageHandlerFactory.Create(keycloak.Authority);
+            return KeycloakHttpMessageHandlerFactory.Create(
+                keycloak.Authority,
+                provider.GetRequiredService<IHostEnvironment>().IsDevelopment());
         });
         builder.Services.AddHttpClient("dokpod-bff-downstream", client =>
         {

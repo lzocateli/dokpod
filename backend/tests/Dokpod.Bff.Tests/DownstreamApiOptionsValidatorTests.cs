@@ -37,6 +37,16 @@ public sealed class DownstreamApiOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_AllowsPrivateHttpBaseUrlInDevelopment()
+    {
+        var result = Validate(
+            new DownstreamApiOptions { BaseUrl = "http://api:8080/" },
+            isDevelopment: true);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
     public void Validate_RejectsNonPositiveTimeoutOrBodyLimit()
     {
         var result = Validate(

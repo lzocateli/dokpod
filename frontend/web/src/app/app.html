@@ -1,15 +1,23 @@
 <main class="shell">
-  <h1>Dokpod</h1>
+  <div class="brand-panel">
+    <picture>
+      <source srcset="brand/dokpod-logo-dark.svg" media="(prefers-color-scheme: dark)" />
+      <img src="brand/dokpod-logo-light.svg" alt="Dokpod" />
+    </picture>
+    <p class="brand-kicker">PLANO DE CONTROLE / 01</p>
+  </div>
 
   <section>
+    <p class="eyebrow">CONSOLE OPERACIONAL</p>
+    <h1>Governe cada engine.<br />Visualize toda a operação.</h1>
     <p>Autenticação e sessão do browser via BFF.</p>
 
-    @if (loading) {
+    @if (loading()) {
       <p>Carregando sessão…</p>
-    } @else if (errorMessage) {
-      <p class="error">{{ errorMessage }}</p>
-    } @else if (session?.authenticated) {
-      <p>Conectado como <strong>{{ session.name ?? session.subject ?? 'usuário' }}</strong>.</p>
+    } @else if (errorMessage()) {
+      <p class="error">{{ errorMessage() }}</p>
+    } @else if (session()?.authenticated) {
+      <p>Conectado como <strong>{{ session()?.name ?? session()?.subject ?? 'usuário' }}</strong>.</p>
       <button type="button" (click)="loadSession()">Atualizar sessão</button>
     } @else {
       <button type="button" (click)="login()">Entrar com Keycloak</button>

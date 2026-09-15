@@ -1,4 +1,5 @@
 using Dokpod.ControlPlane.Api.Authorization;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -32,6 +33,18 @@ public sealed class KeycloakAuthorizationOptionsTests
     }
 
     [Fact]
+    public void Validate_AllowsPrivateHttpAuthorityForDevelopmentConfiguration()
+    {
+        var result = Validate(new KeycloakAuthorizationOptions
+        {
+            Authority = "http://keycloak:8080/realms/dokpod",
+            Audience = "dokpod-api"
+        });
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
     public void Validate_RejectsQueryAudienceOrInvalidTimeout()
     {
         var result = Validate(new KeycloakAuthorizationOptions
@@ -45,5 +58,14 @@ public sealed class KeycloakAuthorizationOptionsTests
     }
 
     private static ValidateOptionsResult Validate(KeycloakAuthorizationOptions options) =>
-        new KeycloakAuthorizationOptionsValidator().Validate(null, options);
+        new KeycloakAuthorizationOptionsValidator(new TestHostEnvironment()).Validate(null, options);
+
+    private sealed class TestHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Development;
+        public string ApplicationName { get; set; } = "Dokpod.ControlPlane.Api.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
+            new Microsoft.Extensions.FileProviders.NullFileProvider();
+    }
 }

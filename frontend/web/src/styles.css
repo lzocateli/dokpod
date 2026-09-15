@@ -1,1 +1,46 @@
-/* You can add global styles to this file, and also import other style files */
+:root {
+	color-scheme: light;
+	--dk-color-ink: #0b1210;
+	--dk-color-paper: #f4f7f5;
+	--dk-color-muted: #52635f;
+	--dk-color-border: #c4cec6;
+	--dk-color-accent: #b7f34a;
+	--dk-color-accent-strong: #2f780f;
+	--dk-color-signal: #d91d86;
+	--dk-font-display: Georgia, "Times New Roman", serif;
+	--dk-font-interface: "Segoe UI", sans-serif;
+	--dk-font-mono: Consolas, "Liberation Mono", monospace;
+	font-family: var(--dk-font-interface);
+	background: var(--dk-color-paper);
+	color: var(--dk-color-ink);
+}
+
+[data-theme="dark"] {
+	color-scheme: dark;
+	--dk-color-ink: #f4f7f5;
+	--dk-color-paper: #0b1210;
+	--dk-color-muted: #a9b5b1;
+	--dk-color-border: #31423e;
+	--dk-color-accent-strong: #b7f34a;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	min-height: 100%;
+	margin: 0;
+}
+
+body {
+	min-width: 320px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.72), transparent 42%),
+		#f3f1ed;
+}
+
+button {
+	font: inherit;
+}

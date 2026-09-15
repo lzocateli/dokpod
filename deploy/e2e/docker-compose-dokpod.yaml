@@ -31,6 +31,9 @@ services:
       DOKPOD_API_CERTIFICATE_PASSWORD: ${DOKPOD_E2E_API_CERTIFICATE_PASSWORD:-}
       DOKPOD_AGENT_CERTIFICATE_FINGERPRINT: ${DOKPOD_E2E_AGENT_CERTIFICATE_FINGERPRINT:-}
       DOKPOD_AGENT_ENVIRONMENT_ID: ${DOKPOD_E2E_AGENT_ENVIRONMENT_ID:-}
+      Authentication__Keycloak__Authority: http://keycloak:8080/realms/${KEYCLOAK_REALM:-dokpod}
+      Authentication__Keycloak__Audience: dokpod-api
+      Authentication__Keycloak__DecisionTimeoutSeconds: 15
     volumes:
       - ${DOKPOD_E2E_API_CERTIFICATE_PATH:?Defina o caminho absoluto do certificado PFX da API}:/certs/api.pfx:ro
     restart: "no"
@@ -51,11 +54,14 @@ services:
     image: dokpod-bff:e2e
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      Authentication__Keycloak__Authority: ${KEYCLOAK_PUBLIC_URL:-https://localhost:7443}/realms/${KEYCLOAK_REALM:-dokpod}
+      Authentication__Keycloak__Authority: https://localhost:7443/realms/${KEYCLOAK_REALM:-dokpod}
       Authentication__Keycloak__ClientId: dokpod-bff
       Authentication__Keycloak__ClientSecret: ${KEYCLOAK_BFF_CLIENT_SECRET:?Defina KEYCLOAK_BFF_CLIENT_SECRET no secret externo}
       Security__AllowedOrigins__0: https://localhost:7443
+      Security__TrustedNetworks__0: 10.200.7.0/24
       Downstream__Api__BaseUrl: http://api:8080
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - dokpod-bff-keys:/var/lib/dokpod-bff
     depends_on:

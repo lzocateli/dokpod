@@ -11,7 +11,7 @@ public sealed class KeycloakAuthorizationOptions
     public int DecisionTimeoutSeconds { get; init; } = 15;
 }
 
-public sealed class KeycloakAuthorizationOptionsValidator : IValidateOptions<KeycloakAuthorizationOptions>
+public sealed class KeycloakAuthorizationOptionsValidator(IHostEnvironment environment) : IValidateOptions<KeycloakAuthorizationOptions>
 {
     public ValidateOptionsResult Validate(string? name, KeycloakAuthorizationOptions options)
     {
@@ -20,7 +20,8 @@ public sealed class KeycloakAuthorizationOptionsValidator : IValidateOptions<Key
             || options.DecisionTimeoutSeconds is < 1 or > 30
             || !string.IsNullOrEmpty(authority.Query)
             || !string.IsNullOrEmpty(authority.Fragment)
-            || (authority.Scheme != Uri.UriSchemeHttps && !authority.IsLoopback))
+            || (authority.Scheme != Uri.UriSchemeHttps
+                && !(authority.IsLoopback || (environment.IsDevelopment() && authority.Scheme == Uri.UriSchemeHttp))))
         {
             return ValidateOptionsResult.Fail(
                 "Authentication:Keycloak deve conter Authority absoluta segura, Audience e timeout positivo.");

@@ -161,6 +161,7 @@ function Import-LocalEnvironment {
         return
     }
 
+    Import-EnvironmentFile -Path (Join-Path $env:APPDATA 'Microsoft/UserSecrets/Altivy.Identity/.env')
     Import-EnvironmentFile -Path (Join-Path $env:APPDATA 'Microsoft/UserSecrets/Dokpod/.env')
 }
 
@@ -190,7 +191,7 @@ if (-not $PSBoundParameters.ContainsKey('Realm')) {
 }
 
 if (-not $PSBoundParameters.ContainsKey('AdminUsername')) {
-    $AdminUsername = Get-EnvironmentSecret @('DOKPOD_KEYCLOAK_ADMIN_USERNAME')
+    $AdminUsername = Get-EnvironmentSecret @('DOKPOD_KEYCLOAK_ADMIN_USERNAME', 'ALTIVY_KEYCLOAK_ADMIN_USERNAME', 'KEYCLOAK_MASTER_USERNAME')
     if (-not $AdminUsername) { $AdminUsername = 'admin' }
 }
 if (-not $SkipUser -and -not $PSBoundParameters.ContainsKey('InitialUserEmail')) {
@@ -223,7 +224,7 @@ if ($DryRun) {
 }
 
 if ($Bootstrap -and -not $AdminPassword) {
-    $adminPasswordValue = Get-EnvironmentSecret @('DOKPOD_KEYCLOAK_ADMIN_PASSWORD')
+    $adminPasswordValue = Get-EnvironmentSecret @('DOKPOD_KEYCLOAK_ADMIN_PASSWORD', 'ALTIVY_KEYCLOAK_ADMIN_PASSWORD', 'KEYCLOAK_MASTER_PASSWORD')
     if (-not $adminPasswordValue) {
         throw 'Defina DOKPOD_KEYCLOAK_ADMIN_PASSWORD ou informe -AdminPassword. Use --help para detalhes.'
     }
@@ -519,7 +520,7 @@ if ($Bootstrap) {
 
     $realmSettings = @{
         displayName = 'Dokpod'; enabled = $true; sslRequired = 'external'; loginTheme = 'dokpod'
-        registrationAllowed = $false; rememberMe = $false; verifyEmail = $true
+        registrationAllowed = $false; rememberMe = $false; verifyEmail = [bool]$smtpHost
         loginWithEmailAllowed = $true; duplicateEmailsAllowed = $false; resetPasswordAllowed = [bool]$smtpHost
         editUsernameAllowed = $false; bruteForceProtected = $true; permanentLockout = $false
         failureFactor = 5; waitIncrementSeconds = 60; quickLoginCheckMilliSeconds = 1000
@@ -627,6 +628,7 @@ Write-Output 'Reconciliadas roles e associações de grupos.'
 if ($InitialUserEmail -and -not $SkipUser) {
     $users = @(Invoke-KeycloakApi GET "/admin/realms/$Realm/users?username=dokpod-admin&exact=true")
     $initialUser = $users | Where-Object username -eq 'dokpod-admin' | Select-Object -First 1
+    $initialUserCreated = $false
     $requiredActions = @('UPDATE_PASSWORD', 'CONFIGURE_TOTP')
     if ($smtpHost) { $requiredActions += 'VERIFY_EMAIL' }
     $userRepresentation = @{
@@ -640,11 +642,12 @@ if ($InitialUserEmail -and -not $SkipUser) {
     else {
         Invoke-KeycloakApi POST "/admin/realms/$Realm/users" $userRepresentation | Out-Null
         $initialUser = [pscustomobject]@{ id = Get-CreatedResourceId; username = 'dokpod-admin' }
+        $initialUserCreated = $true
     }
     if (-not $initialUser) { throw 'Usuário dokpod-admin não foi localizado após a criação.' }
 
     $temporaryPassword = Get-EnvironmentSecret @('DOKPOD_ADMIN_TEMPORARY_PASSWORD')
-    if ($temporaryPassword) {
+    if ($temporaryPassword -and $initialUserCreated) {
         Assert-TemporaryPasswordPolicy $temporaryPassword
         Invoke-KeycloakApi PUT "/admin/realms/$Realm/users/$($initialUser.id)/reset-password" @{
             type = 'password'; value = $temporaryPassword; temporary = $true
