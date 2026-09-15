@@ -22,8 +22,11 @@ Usuário bootstrap do realm master. Usado somente com -Bootstrap.
 SecureString de bootstrap. Usado somente com -Bootstrap.
 
 .PARAMETER Bootstrap
-Usa temporariamente a credencial do realm master para criar o realm. O uso
-cotidiano deve usar DOKPOD_PROVISIONER_CLIENT_SECRET.
+Usa temporariamente a credencial do realm master para criar/atualizar o realm,
+política de segurança, SMTP e provedores sociais (exigem manage-realm e
+manage-identity-providers). O uso cotidiano deve usar DOKPOD_PROVISIONER_CLIENT_SECRET
+e reconcilia somente clients, roles, grupos e usuários (manage-clients,
+manage-users e manage-authorization).
 
 .PARAMETER InitialUserEmail
 E-mail do usuário inicial do laboratório. Quando omitido, usa DOKPOD_ADMIN_EMAIL;
@@ -65,8 +68,12 @@ Requer PowerShell 7.4 ou superior e Keycloak 26.7.0. O fluxo funcional requer
 acesso HTTPS ao Keycloak e uma conta com permissão para administrar o realm.
 Use um cofre para injetar DOKPOD_KEYCLOAK_ADMIN_PASSWORD, DOKPOD_BFF_CLIENT_SECRET,
 DOKPOD_PROVISIONER_CLIENT_SECRET, DOKPOD_SMTP_PASSWORD e DOKPOD_IDP_<PROVEDOR>_CLIENT_SECRET.
-O fluxo cotidiano não usa credenciais do realm master. O bootstrap inicial da
-instância é responsabilidade da plataforma global de identidade.
+O fluxo cotidiano não usa credenciais do realm master. A service account de
+DOKPOD_PROVISIONER_CLIENT_SECRET tem somente manage-clients, manage-users e
+manage-authorization no realm-management do realm Dokpod; política de realm,
+SMTP e IdPs sociais exigem -Bootstrap com a credencial master da plataforma
+global de identidade. Consulte
+../../../architecture-knowledge-base/platforms/identity/docs/access-management.md.
 
 .LINK
 ../../docs/configuracao-keycloak.md
@@ -194,14 +201,17 @@ if (-not $SkipUser -and -not $PSBoundParameters.ContainsKey('InitialUserEmail'))
 }
 
 $plannedResources = @(
-    "realm $Realm e políticas de segurança",
     'clients dokpod-api, dokpod-provisioner, dokpod-bff, dokpod-lab e dokpod-authorization-spike',
     'client scope e mapper de audience dokpod-api',
     'roles Administrator, Operator, Auditor e Reader',
-    'grupos /dokpod/administrators, /dokpod/operators, /dokpod/auditors e /dokpod/readers',
-    'SMTP, quando DOKPOD_SMTP_HOST estiver definido',
-    'provedores sociais com client ID e secret definidos'
+    'grupos /dokpod/administrators, /dokpod/operators, /dokpod/auditors e /dokpod/readers'
 )
+if ($Bootstrap) {
+    $plannedResources = @("realm $Realm e políticas de segurança") + $plannedResources + @(
+        'SMTP, quando DOKPOD_SMTP_HOST estiver definido',
+        'provedores sociais com client ID e secret definidos'
+    )
+}
 if ($InitialUserEmail -and -not $SkipUser) {
     $plannedResources += "usuário dokpod-admin ($InitialUserEmail) no grupo administrators"
 }
@@ -492,52 +502,61 @@ finally {
     $script:adminPasswordPlain = $script:adminPasswordPlain
 }
 
-try {
-    $realmRepresentation = Invoke-KeycloakApi GET "/admin/realms/$Realm"
-}
-catch {
-    if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
-    Invoke-KeycloakApi POST '/admin/realms' @{ realm = $Realm; enabled = $true; displayName = 'Dokpod' } | Out-Null
-    $realmRepresentation = Invoke-KeycloakApi GET "/admin/realms/$Realm"
-    Write-Output "Criado realm $Realm."
-}
-
 $smtpHost = Get-EnvironmentSecret @('DOKPOD_SMTP_HOST')
-$realmSettings = @{
-    displayName = 'Dokpod'; enabled = $true; sslRequired = 'external'; loginTheme = 'dokpod'
-    registrationAllowed = $false; rememberMe = $false; verifyEmail = $true
-    loginWithEmailAllowed = $true; duplicateEmailsAllowed = $false; resetPasswordAllowed = [bool]$smtpHost
-    editUsernameAllowed = $false; bruteForceProtected = $true; permanentLockout = $false
-    failureFactor = 5; waitIncrementSeconds = 60; quickLoginCheckMilliSeconds = 1000
-    minimumQuickLoginWaitSeconds = 60; maxFailureWaitSeconds = 900; maxDeltaTimeSeconds = 43200
-    passwordPolicy = 'length(14) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5)'
-    ssoSessionIdleTimeout = 1800; ssoSessionMaxLifespan = 36000
-    clientSessionIdleTimeout = 900; clientSessionMaxLifespan = 28800
-    accessTokenLifespan = 300; accessCodeLifespan = 60; accessCodeLifespanLogin = 300
-    accessCodeLifespanUserAction = 300; actionTokenGeneratedByAdminLifespan = 43200
-    revokeRefreshToken = $false; eventsEnabled = $true; eventsExpiration = 2592000
-    eventsListeners = @('jboss-logging'); adminEventsEnabled = $true; adminEventsDetailsEnabled = $false
-}
-foreach ($key in $realmSettings.Keys) { $realmRepresentation | Add-Member -NotePropertyName $key -NotePropertyValue $realmSettings[$key] -Force }
 
-if ($smtpHost) {
-    $smtpUser = Get-EnvironmentSecret @('DOKPOD_SMTP_USERNAME')
-    $smtpFrom = Get-EnvironmentSecret @('DOKPOD_SMTP_FROM')
-    if (-not $smtpFrom) { throw 'Defina DOKPOD_SMTP_FROM quando DOKPOD_SMTP_HOST estiver configurado.' }
-    $realmRepresentation | Add-Member -NotePropertyName smtpServer -NotePropertyValue @{
-        host            = $smtpHost
-        port            = $(if ($env:DOKPOD_SMTP_PORT) { $env:DOKPOD_SMTP_PORT } else { '587' })
-        from            = $smtpFrom
-        fromDisplayName = 'Dokpod'
-        auth            = [string][bool]$smtpUser
-        user            = $smtpUser
-        password        = Get-EnvironmentSecret @('DOKPOD_SMTP_PASSWORD')
-        starttls        = 'true'
-        ssl             = 'false'
-    } -Force
+# A service account do provisioner só tem manage-clients/manage-users/manage-authorization;
+# política do realm e SMTP exigem manage-realm e só são aplicadas com -Bootstrap.
+if ($Bootstrap) {
+    try {
+        $realmRepresentation = Invoke-KeycloakApi GET "/admin/realms/$Realm"
+    }
+    catch {
+        if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
+        Invoke-KeycloakApi POST '/admin/realms' @{ realm = $Realm; enabled = $true; displayName = 'Dokpod' } | Out-Null
+        $realmRepresentation = Invoke-KeycloakApi GET "/admin/realms/$Realm"
+        Write-Output "Criado realm $Realm."
+    }
+
+    $realmSettings = @{
+        displayName = 'Dokpod'; enabled = $true; sslRequired = 'external'; loginTheme = 'dokpod'
+        registrationAllowed = $false; rememberMe = $false; verifyEmail = $true
+        loginWithEmailAllowed = $true; duplicateEmailsAllowed = $false; resetPasswordAllowed = [bool]$smtpHost
+        editUsernameAllowed = $false; bruteForceProtected = $true; permanentLockout = $false
+        failureFactor = 5; waitIncrementSeconds = 60; quickLoginCheckMilliSeconds = 1000
+        minimumQuickLoginWaitSeconds = 60; maxFailureWaitSeconds = 900; maxDeltaTimeSeconds = 43200
+        passwordPolicy = 'length(14) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5)'
+        ssoSessionIdleTimeout = 1800; ssoSessionMaxLifespan = 36000
+        clientSessionIdleTimeout = 900; clientSessionMaxLifespan = 28800
+        accessTokenLifespan = 300; accessCodeLifespan = 60; accessCodeLifespanLogin = 300
+        accessCodeLifespanUserAction = 300; actionTokenGeneratedByAdminLifespan = 43200
+        revokeRefreshToken = $false; eventsEnabled = $true; eventsExpiration = 2592000
+        eventsListeners = @('jboss-logging'); adminEventsEnabled = $true; adminEventsDetailsEnabled = $false
+    }
+    foreach ($key in $realmSettings.Keys) { $realmRepresentation | Add-Member -NotePropertyName $key -NotePropertyValue $realmSettings[$key] -Force }
+
+    if ($smtpHost) {
+        $smtpUser = Get-EnvironmentSecret @('DOKPOD_SMTP_USERNAME')
+        $smtpFrom = Get-EnvironmentSecret @('DOKPOD_SMTP_FROM')
+        if (-not $smtpFrom) { throw 'Defina DOKPOD_SMTP_FROM quando DOKPOD_SMTP_HOST estiver configurado.' }
+        $realmRepresentation | Add-Member -NotePropertyName smtpServer -NotePropertyValue @{
+            host            = $smtpHost
+            port            = $(if ($env:DOKPOD_SMTP_PORT) { $env:DOKPOD_SMTP_PORT } else { '587' })
+            from            = $smtpFrom
+            fromDisplayName = 'Dokpod'
+            auth            = [string][bool]$smtpUser
+            user            = $smtpUser
+            password        = Get-EnvironmentSecret @('DOKPOD_SMTP_PASSWORD')
+            starttls        = 'true'
+            ssl             = 'false'
+        } -Force
+    }
+    Invoke-KeycloakApi PUT "/admin/realms/$Realm" $realmRepresentation | Out-Null
+    Write-Output "Atualizado baseline do realm $Realm."
 }
-Invoke-KeycloakApi PUT "/admin/realms/$Realm" $realmRepresentation | Out-Null
-Write-Output "Atualizado baseline do realm $Realm."
+else {
+    if ($smtpHost) { Write-Warning 'DOKPOD_SMTP_HOST definido, mas SMTP exige manage-realm; rode com -Bootstrap para aplicar.' }
+    Write-Output "Política do realm $Realm preservada; use -Bootstrap para alterá-la."
+}
 
 $apiClient = @{
     clientId = 'dokpod-api'; name = 'Dokpod API'; enabled = $true; publicClient = $false
@@ -649,7 +668,17 @@ $providers = @(
         }
     }
 )
-foreach ($provider in $providers) { Ensure-IdentityProvider $provider }
+if ($Bootstrap) {
+    foreach ($provider in $providers) { Ensure-IdentityProvider $provider }
+}
+else {
+    $configuredProviders = $providers | Where-Object {
+        (Get-EnvironmentSecret @("DOKPOD_IDP_$($_.prefix)_CLIENT_ID")) -or (Get-EnvironmentSecret @("DOKPOD_IDP_$($_.prefix)_CLIENT_SECRET"))
+    }
+    if ($configuredProviders) {
+        Write-Warning "Ignorando provedores sociais configurados ($($configuredProviders.alias -join ', ')); IdP exige manage-identity-providers. Use -Bootstrap."
+    }
+}
 
 $script:accessToken = $null
 $script:adminPasswordPlain = $null
