@@ -262,8 +262,8 @@ public static class DownstreamProxy
         {
             Scheme = downstreamUri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws"
         }.Uri;
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
-        timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+        using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+        connectTimeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         using var downstreamSocket = new ClientWebSocket();
         downstreamSocket.Options.SetRequestHeader("Authorization", $"Bearer {accessToken}");
         foreach (var protocol in context.WebSockets.WebSocketRequestedProtocols)
@@ -273,11 +273,14 @@ public static class DownstreamProxy
 
         try
         {
-            await downstreamSocket.ConnectAsync(websocketUri, timeout.Token);
+            await downstreamSocket.ConnectAsync(websocketUri, connectTimeout.Token);
             using var localSocket = await context.WebSockets.AcceptWebSocketAsync(downstreamSocket.SubProtocol);
-            var toDownstream = PumpWebSocketAsync(localSocket, downstreamSocket, timeout.Token);
-            var toLocal = PumpWebSocketAsync(downstreamSocket, localSocket, timeout.Token);
+            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+            var toDownstream = PumpWebSocketAsync(localSocket, downstreamSocket, lifetime.Token);
+            var toLocal = PumpWebSocketAsync(downstreamSocket, localSocket, lifetime.Token);
             await Task.WhenAny(toDownstream, toLocal);
+            lifetime.Cancel();
+            await Task.WhenAll(toDownstream, toLocal);
         }
         catch (WebSocketException)
         {

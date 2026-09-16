@@ -116,6 +116,7 @@ Os valores sensíveis são injetados por secret provider ou arquivo montado fora
 - `Downstream:Api:MaxRequestContentLengthBytes` e `Downstream:Api:MaxResponseContentLengthBytes`: limites de corpo do relay, inclusive para uploads chunked e respostas sem `Content-Length`;
 - `Bff:TokenRefreshTimeoutSeconds` e `Bff:TokenRefreshMaxResponseContentBufferSize`: limites do refresh;
 - `Downstream:Api:TimeoutSeconds`, `Downstream:Api:MaxRequestContentLengthBytes` e `Downstream:Api:MaxResponseContentLengthBytes`: timeout e limites do relay para a API;
+- `Downstream:Api:TimeoutSeconds` aceita no máximo 120 segundos; cada limite de corpo aceita no máximo 32 MiB. No WebSocket, o timeout vale somente para o handshake; a conexão permanece ativa até cancelamento ou encerramento de uma das pontas;
 - `Bff:LoginRateLimitPermitLimit`, `Bff:LoginRateLimitWindowSeconds` e `Bff:LoginRateLimitQueueLimit`: política de login.
 
 ## Validação

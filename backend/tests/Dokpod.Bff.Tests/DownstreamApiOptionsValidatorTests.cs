@@ -61,6 +61,34 @@ public sealed class DownstreamApiOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_RejectsTimeoutAboveConfiguredMaximum()
+    {
+        var result = Validate(
+            new DownstreamApiOptions
+            {
+                BaseUrl = "https://api.example.test/",
+                TimeoutSeconds = DownstreamApiOptions.MaxTimeoutSeconds + 1
+            },
+            isDevelopment: false);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void Validate_RejectsBodyLimitAboveConfiguredMaximum()
+    {
+        var result = Validate(
+            new DownstreamApiOptions
+            {
+                BaseUrl = "https://api.example.test/",
+                MaxResponseContentLengthBytes = DownstreamApiOptions.MaxBodyContentLengthBytes + 1
+            },
+            isDevelopment: false);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
     public void Validate_RejectsQueryOrFragmentInBaseUrl()
     {
         var result = Validate(

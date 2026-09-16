@@ -247,6 +247,7 @@ Evidência parcial em 2026-09-13:
 - `DownstreamProxyTests` prova que o Bearer da sessão substitui o Authorization do browser, cookies de entrada não são encaminhados, `Set-Cookie` do downstream não retorna ao browser e a query string é preservada;
 - `DownstreamProxyTests` também prova respostas 401/403 sem redirect, 502 para indisponibilidade, 504 para timeout, rejeição de traversal e URI absoluta, descarte de `Location` externo, allowlist de headers e limites de corpos conhecidos e chunked; mutações REST exigem validação antiforgery por filtro de endpoint;
 - a configuração do destino usa uma única fonte `Downstream:Api`, com esquema seguro e timeout aplicado também à leitura do corpo;
+- em 2026-09-16, `Downstream:Api` passou a rejeitar timeout acima de 120 segundos e limites de corpo acima de 32 MiB; o timeout do WebSocket ficou restrito ao handshake e o encerramento dos pumps passou a ser coordenado;
 - `DownstreamApiOptionsValidatorTests` cobre HTTPS fora de Development, loopback HTTP somente em Development, query/fragment e limites positivos;
 - política operacional de egress para destinos privados, SignalR/WebSocket e integração com a API pública permanecem pendentes.
 

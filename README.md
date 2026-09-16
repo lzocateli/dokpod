@@ -1,6 +1,6 @@
 # Dokpod
 
-![Dokpod — controle local, visão total](docs/assets/brand/dokpod-banner.svg)
+![Dokpod — governe cada engine, visualize toda operação](docs/assets/brand/dokpod-banner.svg)
 
 Dokpod é uma plataforma web self-hosted para descobrir, observar e operar containers Docker e Podman em múltiplos servidores Linux e Windows. Em Linux, cada servidor executa o agente .NET em container. Em Windows, o agente é um Worker Service self-contained, instalado como Windows Service e sem dependência de runtime .NET no host. Em ambos os casos, o agente acessa apenas o engine local e inicia uma conexão autenticada com o plano de controle.
 

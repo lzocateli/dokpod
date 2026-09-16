@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="640" viewBox="0 0 1600 640" role="img" aria-labelledby="title description">
-  <title id="title">Dokpod — controle local, visão total</title>
+  <title id="title">Dokpod — governe cada engine, visualize toda operação</title>
   <desc id="description">Banner do Dokpod com logotipo e uma malha técnica representando o plano de controle conectado a engines Docker e Podman.</desc>
 
   <defs>
