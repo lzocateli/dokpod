@@ -82,7 +82,9 @@ public static class BffHost
         {
             options.Cookie.Name = runtime.AntiforgeryCookieName;
             options.Cookie.HttpOnly = true;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
             options.Cookie.SameSite = SameSiteMode.Strict;
             options.HeaderName = runtime.AntiforgeryHeaderName;
         });

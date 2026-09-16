@@ -3,7 +3,7 @@ using Microsoft.Extensions.Options;
 
 namespace Dokpod.Bff.Authentication;
 
-public sealed class ConfigureCookieOptions(ServerSideTicketStore ticketStore)
+public sealed class ConfigureCookieOptions(ServerSideTicketStore ticketStore, IHostEnvironment environment)
     : IPostConfigureOptions<CookieAuthenticationOptions>
 {
     public void PostConfigure(string? name, CookieAuthenticationOptions options)
@@ -12,7 +12,9 @@ public sealed class ConfigureCookieOptions(ServerSideTicketStore ticketStore)
         options.Cookie.Name = "__Host-Dokpod.Session";
         options.Cookie.Path = "/";
         options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SecurePolicy = environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.IsEssential = true;
         options.ExpireTimeSpan = TimeSpan.FromHours(8);

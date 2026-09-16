@@ -7,9 +7,11 @@ FROM ${DOTNET_SDK_IMAGE} AS build
 
 WORKDIR /src
 
+COPY --chown=${APP_UID}:${APP_UID} contracts/agent/ contracts/agent/
 COPY --chown=${APP_UID}:${APP_UID} backend/Directory.Build.props backend/Directory.Packages.props backend/
 COPY --chown=${APP_UID}:${APP_UID} backend/apps/Dokpod.Agent/Dokpod.Agent.csproj backend/apps/Dokpod.Agent/
 COPY --chown=${APP_UID}:${APP_UID} backend/libs/Dokpod.Agent.Application/Dokpod.Agent.Application.csproj backend/libs/Dokpod.Agent.Application/
+COPY --chown=${APP_UID}:${APP_UID} backend/libs/Dokpod.Agent.Contracts/Dokpod.Agent.Contracts.csproj backend/libs/Dokpod.Agent.Contracts/
 COPY --chown=${APP_UID}:${APP_UID} backend/libs/Dokpod.Agent.Infrastructure/Dokpod.Agent.Infrastructure.csproj backend/libs/Dokpod.Agent.Infrastructure/
 COPY --chown=${APP_UID}:${APP_UID} backend/libs/Dokpod.Domain/Dokpod.Domain.csproj backend/libs/Dokpod.Domain/
 
@@ -17,8 +19,17 @@ RUN dotnet restore backend/apps/Dokpod.Agent/Dokpod.Agent.csproj
 
 COPY --chown=${APP_UID}:${APP_UID} backend/apps/Dokpod.Agent/ backend/apps/Dokpod.Agent/
 COPY --chown=${APP_UID}:${APP_UID} backend/libs/Dokpod.Agent.Application/ backend/libs/Dokpod.Agent.Application/
+COPY --chown=${APP_UID}:${APP_UID} backend/libs/Dokpod.Agent.Contracts/ backend/libs/Dokpod.Agent.Contracts/
 COPY --chown=${APP_UID}:${APP_UID} backend/libs/Dokpod.Agent.Infrastructure/ backend/libs/Dokpod.Agent.Infrastructure/
 COPY --chown=${APP_UID}:${APP_UID} backend/libs/Dokpod.Domain/ backend/libs/Dokpod.Domain/
+
+FROM build AS dev
+
+ENV DOTNET_ENVIRONMENT=Development
+
+ENTRYPOINT ["dotnet", "run", "--no-restore", "--project", "backend/apps/Dokpod.Agent/Dokpod.Agent.csproj"]
+
+FROM build AS publish
 
 RUN dotnet publish backend/apps/Dokpod.Agent/Dokpod.Agent.csproj \
     --configuration Release \
@@ -40,7 +51,7 @@ LABEL org.opencontainers.image.title="Dokpod Agent" \
 USER root
 RUN install --directory --owner="${APP_UID}" --group="${APP_UID}" --mode=0700 /var/lib/dokpod-agent
 
-COPY --from=build --chown=${APP_UID}:${APP_UID} /src/out/ /app/
+COPY --from=publish --chown=${APP_UID}:${APP_UID} /src/out/ /app/
 
 USER ${APP_UID}:${APP_UID}
 

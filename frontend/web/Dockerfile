@@ -6,7 +6,18 @@ COPY frontend/web/package.json frontend/web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY frontend/web/ ./
-RUN npm run build -- --configuration production --base-href /dokpod/
+
+ARG BASE_HREF=/dokpod/
+
+FROM build AS dev
+
+ENV NG_CLI_ANALYTICS=false
+
+ENTRYPOINT ["npm", "run", "start", "--", "--host", "0.0.0.0", "--port", "4200"]
+
+FROM build AS publish
+
+RUN npm run build -- --configuration production --base-href ${BASE_HREF}
 
 FROM lzocateli/nginx:1.28.0-bookworm AS runtime
 LABEL org.opencontainers.image.title="dokpod-web" \
@@ -15,7 +26,7 @@ LABEL org.opencontainers.image.title="dokpod-web" \
     org.opencontainers.image.documentation="https://github.com/lzocateli/dokpod/tree/main/deploy/e2e" \
     org.opencontainers.image.url="https://github.com/lzocateli/dokpod"
 COPY deploy/nginx/conf.d/web.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /src/dist/dokpod-web/browser/ /usr/share/nginx/html/
+COPY --from=publish /src/dist/dokpod-web/browser/ /usr/share/nginx/html/
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
