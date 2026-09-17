@@ -67,6 +67,25 @@ public sealed class KeycloakAuthorizationDecisionServiceTests
     }
 
     [Fact]
+    public async Task DecideAsync_WithoutAccessTokenFailsClosed()
+    {
+        using var handler = new StubHandler(HttpStatusCode.OK, "{\"result\":true}");
+        using var client = new HttpClient(handler);
+
+        var decision = await CreateService(client).DecideAsync(
+            "urn:dokpod:environment:00000000-0000-0000-0000-000000000001",
+            "environment:read",
+            AuthenticatedActor.FromSubject("user-1"),
+            "",
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.Equal(AuthorizationDecisionOutcome.Indeterminate, decision.Outcome);
+        Assert.Equal("authorization_unavailable", decision.FailureCode);
+        Assert.Null(handler.AuthorizationHeader);
+    }
+
+    [Fact]
     public async Task DecideAsync_RejectsUnsupportedResourceBeforeCallingKeycloak()
     {
         using var handler = new StubHandler(HttpStatusCode.OK, "{\"result\":true}");

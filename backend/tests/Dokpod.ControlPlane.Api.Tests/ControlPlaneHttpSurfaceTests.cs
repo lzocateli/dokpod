@@ -32,8 +32,10 @@ public sealed class ControlPlaneHttpSurfaceTests
             .ToDictionary(endpoint => endpoint.RoutePattern.RawText!, StringComparer.Ordinal);
 
         Assert.Contains("/api/v1/session", endpoints.Keys);
+        Assert.Contains("/api/v1/environments", endpoints.Keys);
         Assert.Contains("/hubs/control-plane", endpoints.Keys);
         Assert.NotNull(endpoints["/api/v1/session"].Metadata.GetMetadata<IAuthorizeData>());
+        Assert.NotNull(endpoints["/api/v1/environments"].Metadata.GetMetadata<IAuthorizeData>());
         Assert.NotNull(endpoints["/hubs/control-plane"].Metadata.GetMetadata<IAuthorizeData>());
     }
 

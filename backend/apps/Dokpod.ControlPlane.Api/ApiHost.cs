@@ -16,7 +16,10 @@ using Microsoft.Extensions.Options;
 using Dokpod.ControlPlane.Api.Realtime;
 using Dokpod.ControlPlane.Api.Authorization;
 using Dokpod.ControlPlane.Application.Authorization;
+using Dokpod.ControlPlane.Application.Auditing;
+using Dokpod.ControlPlane.Application.Environments;
 using System.Security.Claims;
+using Dokpod.ControlPlane.Api.Endpoints;
 
 namespace Dokpod.ControlPlane.Api;
 
@@ -58,7 +61,7 @@ public static class ApiHost
                 {
                     httpsOptions.ServerCertificate = options.ServerCertificate;
                     httpsOptions.ClientCertificateMode = ClientCertificateMode.RequireCertificate;
-                    httpsOptions.CheckCertificateRevocation = true;
+                    httpsOptions.CheckCertificateRevocation = options.ClientCertificateValidation is null;
                     httpsOptions.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
                     if (options.ClientCertificateValidation is not null)
                     {
@@ -67,6 +70,10 @@ public static class ApiHost
                 });
             });
         });
+
+        builder.Configuration["Authentication:Keycloak:Authority"] ??= "https://keycloak.invalid/realms/dokpod";
+        builder.Configuration["Authentication:Keycloak:Audience"] ??= "dokpod-api";
+        builder.Configuration["Authentication:Keycloak:DecisionTimeoutSeconds"] ??= "3";
 
         builder.Services.AddGrpc(options =>
         {
@@ -103,6 +110,10 @@ public static class ApiHost
         builder.Services.AddSingleton<IAgentIdentityRegistry, UnavailableAgentIdentityRegistry>();
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
         builder.Services.AddSingleton<AgentSessionNegotiator>();
+        builder.Services.AddScoped<IAuditEventWriter, UnavailableAuditEventWriter>();
+        builder.Services.AddScoped<IEnvironmentRegistrationStore, UnavailableEnvironmentRegistrationStore>();
+        builder.Services.AddScoped<EnvironmentAccessService>();
+        builder.Services.AddScoped<EnvironmentRegistrationService>();
         var databaseConnectionString = builder.Configuration.GetConnectionString("ControlPlane");
         if (!string.IsNullOrWhiteSpace(databaseConnectionString))
         {
@@ -115,7 +126,7 @@ public static class ApiHost
 
     public static void MapEndpoints(WebApplication app)
     {
-        app.MapGrpcService<AgentControlService>();
+        app.MapGrpcService<AgentControlService>().AllowAnonymous();
         app.MapHealthChecks("/health/live", new HealthCheckOptions
         {
             Predicate = _ => false,
@@ -131,6 +142,7 @@ public static class ApiHost
         {
             subject = principal.FindFirstValue("sub")
         })).RequireAuthorization();
+        EnvironmentEndpoints.Map(app);
         app.MapHub<ControlPlaneHub>("/hubs/control-plane").RequireAuthorization();
     }
 

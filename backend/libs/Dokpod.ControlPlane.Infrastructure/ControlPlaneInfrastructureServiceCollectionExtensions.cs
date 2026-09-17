@@ -1,5 +1,6 @@
 using Dokpod.ControlPlane.Application.Auditing;
 using Dokpod.ControlPlane.Application.Agents;
+using Dokpod.ControlPlane.Application.Environments;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -22,6 +23,7 @@ public static class ControlPlaneInfrastructureServiceCollectionExtensions
             options.UseNpgsql(parsedConnectionString.ConnectionString));
         services.AddScoped<IAgentIdentityRegistry, PostgresAgentIdentityRegistry>();
         services.AddScoped<IAuditEventWriter, PostgresAuditEventWriter>();
+        services.AddScoped<IEnvironmentRegistrationStore, PostgresEnvironmentRegistrationStore>();
 
         return services;
     }

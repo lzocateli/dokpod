@@ -218,7 +218,12 @@ Evidências:
 - exceções do decider são convertidas em decisão `authorization_unavailable`/`Indeterminate` e auditadas antes do retorno fechado; cancelamento explícito é propagado;
 - decisões externas inválidas ou sem código de falha são normalizadas para `authorization_invalid`/`Indeterminate`;
 - testes verificam actor, scope, correlation ID e URN opaco, além de provar que nome/host não são encaminhados;
-- adapter/cliente Keycloak concreto permanece pendente, conforme o contrato aprovado de integração externa.
+- adapter/cliente Keycloak concreto permanece pendente, conforme o contrato aprovado de integração externa;
+- porta `IEnvironmentRegistrationStore`, caso de uso de registro e implementação PostgreSQL adicionados;
+- `POST /api/v1/environments` exige autenticação, deriva o ator do `sub`, usa o Bearer somente no salto server-side e retorna `application/problem+json` para negação, conflito ou indisponibilidade;
+- persistência ocorre somente depois da decisão autorizada e da auditoria; rota e ordem autorização/auditoria/persistência cobertas por testes focados;
+- migration `202609170002_CreateEnvironments` cria o registro durável de ambientes com nome único;
+- integração real PostgreSQL/Keycloak, idempotência de retry no cadastro e testes horizontais permanecem pendentes.
 
 ### P03-06: API, contrato e observabilidade
 

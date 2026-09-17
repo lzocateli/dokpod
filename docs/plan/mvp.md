@@ -72,7 +72,7 @@ Evidências:
 
 ### P-03: Identidade e cadastro de ambientes
 
-**Status:** not-started  
+**Status:** in-progress  
 **Responsável:** Lincoln Zocateli  
 **Dependências:** P-02
 
@@ -81,12 +81,13 @@ Evidências:
 Entregas:
 
 - auditoria inicial.
+- endpoint inicial de cadastro protegido por Keycloak, com persistência PostgreSQL e auditoria append-only.
 
 Validação:
 - testes de login/logout sem token no browser, Keycloak indisponível, autorização horizontal/SignalR, CSRF, corrida no bootstrap, agente falso, ambiente divergente, clone concorrente, replay, token expirado e revogação de stream.
 
 Evidências:
-- pendente.
+- caso de uso, persistência de ambientes e endpoint protegido implementados; integração real PostgreSQL/Keycloak e testes horizontais permanecem pendentes.
 
 ### P-04: Inventário reconciliável
 
@@ -192,3 +193,4 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-08 | P-01 | in-progress | in-progress | serialização por ambiente/alvo e validação do mapeamento Protobuf para domínio comprovadas por 28 testes backend | IA assistida |
 | 2026-09-08 | P-01 | in-progress | in-progress | host HTTPS/HTTP2, cliente gRPC com certificado e fencing por ambiente compilados; handshake end-to-end, revogação ativa, perda de resposta e reconexão permanecem pendentes | IA assistida |
 | 2026-09-08 | P-01 | in-progress | in-progress | dois testes focados adicionados e aprovados; handshake Kestrel end-to-end, revogação ativa, perda de resposta e reconexão permanecem pendentes | IA assistida |
+| 2026-09-17 | P-03 | not-started | in-progress | caso de uso, persistência de ambientes e endpoint protegido adicionados; integração real PostgreSQL/Keycloak e testes horizontais permanecem pendentes | IA assistida |

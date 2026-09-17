@@ -414,7 +414,7 @@ public sealed class TransportBoundaryTests
 
         public static TestCertificates Create()
         {
-            using var authorityKey = RSA.Create(2048);
+            var authorityKey = RSA.Create(2048);
             var authorityRequest = new CertificateRequest("CN=Dokpod test CA", authorityKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             authorityRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 1, true));
             authorityRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, true));
@@ -427,7 +427,7 @@ public sealed class TransportBoundaryTests
 
         public static X509Certificate2 CreateUntrustedAgentCertificate()
         {
-            using var key = RSA.Create(2048);
+            var key = RSA.Create(2048);
             var request = new CertificateRequest(
                 "CN=untrusted-agent",
                 key,
@@ -462,15 +462,22 @@ public sealed class TransportBoundaryTests
 
         private static X509Certificate2 CreateSignedCertificate(X509Certificate2 authority, string commonName, bool client)
         {
-            using var key = RSA.Create(2048);
+            var key = RSA.Create(2048);
             var request = new CertificateRequest($"CN={commonName}", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             var usages = new OidCollection { new Oid(client ? "1.3.6.1.5.5.7.3.2" : "1.3.6.1.5.5.7.3.1") };
             request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(usages, true));
+            request.CertificateExtensions.Add(new X509KeyUsageExtension(
+                client
+                    ? X509KeyUsageFlags.DigitalSignature
+                    : X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
+                true));
             request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
             if (!client)
             {
                 var names = new SubjectAlternativeNameBuilder();
                 names.AddDnsName("localhost");
+                names.AddIpAddress(IPAddress.Loopback);
+                names.AddIpAddress(IPAddress.IPv6Loopback);
                 request.CertificateExtensions.Add(names.Build());
             }
 
@@ -479,7 +486,12 @@ public sealed class TransportBoundaryTests
                 DateTimeOffset.UtcNow.AddMinutes(-1),
                 DateTimeOffset.UtcNow.AddMinutes(5),
                 RandomNumberGenerator.GetBytes(16));
-            return certificate.CopyWithPrivateKey(key);
+            var withPrivateKey = certificate.CopyWithPrivateKey(key);
+            var pfxBytes = withPrivateKey.Export(X509ContentType.Pfx, string.Empty);
+            return X509CertificateLoader.LoadPkcs12(
+                pfxBytes,
+                string.Empty,
+                X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet);
         }
 
         public void Dispose()

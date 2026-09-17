@@ -23,10 +23,21 @@ public sealed class KeycloakAuthorizationDecisionService(
         ArgumentException.ThrowIfNullOrWhiteSpace(resource);
         ArgumentException.ThrowIfNullOrWhiteSpace(scope);
         ArgumentNullException.ThrowIfNull(actor);
-        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
         if (!IsSupportedPermission(resource, scope))
         {
             throw new ArgumentException("Recurso ou scope de autorização inválido.");
+        }
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return LogDecision(
+                new EnvironmentAuthorizationDecision(
+                    AuthorizationDecisionOutcome.Indeterminate,
+                    "authorization_unavailable"),
+                resource,
+                scope,
+                correlationId,
+                Stopwatch.StartNew());
         }
 
         var stopwatch = Stopwatch.StartNew();
