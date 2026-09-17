@@ -29,8 +29,6 @@ services:
       DOKPOD_API_HEALTH_PORT: 8080
       DOKPOD_API_CERTIFICATE_PATH: /certs/api.pfx
       DOKPOD_API_CERTIFICATE_PASSWORD: ${DOKPOD_E2E_API_CERTIFICATE_PASSWORD:-}
-      DOKPOD_AGENT_CERTIFICATE_FINGERPRINT: ${DOKPOD_E2E_AGENT_CERTIFICATE_FINGERPRINT:-}
-      DOKPOD_AGENT_ENVIRONMENT_ID: ${DOKPOD_E2E_AGENT_ENVIRONMENT_ID:-}
       Authentication__Keycloak__Authority: http://keycloak:8080/realms/${KEYCLOAK_REALM:-dokpod}
       Authentication__Keycloak__Audience: dokpod-api
       Authentication__Keycloak__DecisionTimeoutSeconds: 15

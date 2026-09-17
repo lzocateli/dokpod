@@ -76,7 +76,7 @@ Evidências:
 
 ### P03-02: Projeto de infraestrutura do plano de controle
 
-**Status:** not-started  
+**Status:** in-progress
 **Responsável:** Lincoln Zocateli  
 **Dependências:** P03-01 aprovado
 
@@ -98,7 +98,11 @@ Validação:
 
 Evidências:
 
-- pendente.
+- `ControlPlaneDbContext` e composição de infraestrutura criados;
+- `PostgresAgentIdentityRegistry` consulta somente identidades ativas por fingerprint e o host usa registry fail-closed quando PostgreSQL não está configurado;
+- migration expand `202609170001_CreateAgentIdentities` cria a tabela de identidades sem remover dados existentes;
+- build containerizado aprovado sem warnings ou erros; testes focados de identidade aprovados (3 testes);
+- persistência real da identidade, cadastro/aprovação e revogação ainda dependem do fluxo P03-05 e de PostgreSQL real.
 
 ### P03-03: Dependências e schema de auditoria
 

@@ -100,7 +100,7 @@ public static class ApiHost
         });
         builder.Services.AddHealthChecks()
             .AddCheck("controlplane-api", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["ready"]);
-        builder.Services.AddSingleton<IAgentIdentityRegistry, EnvironmentVariableAgentIdentityRegistry>();
+        builder.Services.AddSingleton<IAgentIdentityRegistry, UnavailableAgentIdentityRegistry>();
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
         builder.Services.AddSingleton<AgentSessionNegotiator>();
         var databaseConnectionString = builder.Configuration.GetConnectionString("ControlPlane");
