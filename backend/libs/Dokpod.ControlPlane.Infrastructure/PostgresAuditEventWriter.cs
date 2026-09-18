@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Diagnostics;
 using Dokpod.ControlPlane.Application.Auditing;
 using Dokpod.Domain.Auditing;
 using Microsoft.EntityFrameworkCore;
@@ -7,49 +8,70 @@ using Npgsql;
 
 namespace Dokpod.ControlPlane.Infrastructure;
 
-public sealed class PostgresAuditEventWriter(ControlPlaneDbContext dbContext) : IAuditEventWriter
+public sealed class PostgresAuditEventWriter(
+    ControlPlaneDbContext dbContext,
+    AuditEventMetrics metrics) : IAuditEventWriter
 {
+    public PostgresAuditEventWriter(ControlPlaneDbContext dbContext)
+        : this(dbContext, new AuditEventMetrics())
+    {
+    }
+
     public async Task AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(auditEvent);
+        metrics.RecordAttempt();
+        var stopwatch = Stopwatch.StartNew();
 
-        var payloadHash = ComputePayloadHash(auditEvent);
-        if (dbContext.Database.IsRelational())
+        try
         {
-            await AppendRelationalAsync(auditEvent, payloadHash, cancellationToken).ConfigureAwait(false);
-            return;
+            var payloadHash = ComputePayloadHash(auditEvent);
+            if (dbContext.Database.IsRelational())
+            {
+                await AppendRelationalAsync(auditEvent, payloadHash, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            var key = await dbContext.AuditEventKeys
+                .AsTracking()
+                .SingleOrDefaultAsync(x => x.EventId == auditEvent.EventId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (key is not null)
+            {
+                EnsureSamePayload(key.PayloadHash, payloadHash, auditEvent.EventId);
+                return;
+            }
+
+            dbContext.AuditEvents.Add(new AuditEventEntity
+            {
+                EventId = auditEvent.EventId,
+                OccurredAtUtc = auditEvent.OccurredAtUtc,
+                CorrelationId = auditEvent.CorrelationId,
+                ActorKind = (int)auditEvent.ActorKind,
+                ActorId = auditEvent.ActorId,
+                Action = auditEvent.Action,
+                EnvironmentId = auditEvent.EnvironmentId,
+                Outcome = (int)auditEvent.Outcome,
+                FailureCode = auditEvent.FailureCode,
+            });
+            dbContext.AuditEventKeys.Add(new AuditEventKeyEntity
+            {
+                EventId = auditEvent.EventId,
+                PayloadHash = payloadHash,
+            });
+
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-
-        var key = await dbContext.AuditEventKeys
-            .AsTracking()
-            .SingleOrDefaultAsync(x => x.EventId == auditEvent.EventId, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (key is not null)
+        catch
         {
-            EnsureSamePayload(key.PayloadHash, payloadHash, auditEvent.EventId);
-            return;
+            metrics.RecordFailure();
+            throw;
         }
-
-        dbContext.AuditEvents.Add(new AuditEventEntity
+        finally
         {
-            EventId = auditEvent.EventId,
-            OccurredAtUtc = auditEvent.OccurredAtUtc,
-            CorrelationId = auditEvent.CorrelationId,
-            ActorKind = (int)auditEvent.ActorKind,
-            ActorId = auditEvent.ActorId,
-            Action = auditEvent.Action,
-            EnvironmentId = auditEvent.EnvironmentId,
-            Outcome = (int)auditEvent.Outcome,
-            FailureCode = auditEvent.FailureCode,
-        });
-        dbContext.AuditEventKeys.Add(new AuditEventKeyEntity
-        {
-            EventId = auditEvent.EventId,
-            PayloadHash = payloadHash,
-        });
-
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            metrics.RecordDuration(stopwatch.Elapsed);
+        }
     }
 
     private async Task AppendRelationalAsync(
@@ -64,7 +86,7 @@ public sealed class PostgresAuditEventWriter(ControlPlaneDbContext dbContext) : 
         try
         {
             await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-                SELECT dokpod_append_audit_event(
+                SELECT dokpod.dokpod_append_audit_event(
                     {auditEvent.EventId},
                     {auditEvent.OccurredAtUtc},
                     {auditEvent.CorrelationId},
@@ -81,19 +103,21 @@ public sealed class PostgresAuditEventWriter(ControlPlaneDbContext dbContext) : 
         catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation)
         {
             await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            metrics.RecordConflict();
             throw new InvalidOperationException(
                 $"Audit event {auditEvent.EventId} already exists with conflicting payload.",
                 exception);
         }
     }
 
-    private static void EnsureSamePayload(byte[] existingHash, byte[] payloadHash, Guid eventId)
+    private void EnsureSamePayload(byte[] existingHash, byte[] payloadHash, Guid eventId)
     {
         if (existingHash.AsSpan().SequenceEqual(payloadHash))
         {
             return;
         }
 
+        metrics.RecordConflict();
         throw new InvalidOperationException(
             $"Audit event {eventId} already exists with conflicting payload.");
     }

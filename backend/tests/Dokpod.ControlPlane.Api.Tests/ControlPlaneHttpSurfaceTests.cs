@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Dokpod.ControlPlane.Api.Tests;
@@ -33,10 +36,27 @@ public sealed class ControlPlaneHttpSurfaceTests
 
         Assert.Contains("/api/v1/session", endpoints.Keys);
         Assert.Contains("/api/v1/environments", endpoints.Keys);
+        Assert.Contains("/api/v1/environments/{environmentId:guid}", endpoints.Keys);
         Assert.Contains("/hubs/control-plane", endpoints.Keys);
+        Assert.Contains("/health/live", endpoints.Keys);
+        Assert.Contains("/health/ready", endpoints.Keys);
+        Assert.Contains("/health/ready/database", endpoints.Keys);
+        Assert.Contains("/health/ready/keycloak", endpoints.Keys);
         Assert.NotNull(endpoints["/api/v1/session"].Metadata.GetMetadata<IAuthorizeData>());
         Assert.NotNull(endpoints["/api/v1/environments"].Metadata.GetMetadata<IAuthorizeData>());
+        Assert.NotNull(endpoints["/api/v1/environments/{environmentId:guid}"].Metadata.GetMetadata<IAuthorizeData>());
         Assert.NotNull(endpoints["/hubs/control-plane"].Metadata.GetMetadata<IAuthorizeData>());
+
+        var healthChecks = app.Services
+            .GetRequiredService<IOptions<HealthCheckServiceOptions>>()
+            .Value.Registrations
+            .ToDictionary(registration => registration.Name, StringComparer.Ordinal);
+        Assert.Contains("controlplane-api", healthChecks.Keys);
+        Assert.Contains("postgresql", healthChecks.Keys);
+        Assert.Contains("keycloak", healthChecks.Keys);
+        Assert.Contains("api", healthChecks["controlplane-api"].Tags);
+        Assert.Contains("database", healthChecks["postgresql"].Tags);
+        Assert.Contains("keycloak", healthChecks["keycloak"].Tags);
     }
 
     [Fact]

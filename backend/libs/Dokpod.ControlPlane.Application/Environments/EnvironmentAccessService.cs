@@ -7,7 +7,8 @@ namespace Dokpod.ControlPlane.Application.Environments;
 
 public sealed record EnvironmentAccessDecisionResult(
     bool Allowed,
-    string? FailureCode);
+    string? FailureCode,
+    AuthorizationDecisionOutcome Outcome);
 
 public sealed class EnvironmentAccessService(
     IAuditEventWriter auditEventWriter,
@@ -92,6 +93,6 @@ public sealed class EnvironmentAccessService(
 
         await auditEventWriter.AppendAsync(auditEvent, cancellationToken).ConfigureAwait(false);
 
-        return new EnvironmentAccessDecisionResult(authorization.Allowed, failureCode);
+        return new EnvironmentAccessDecisionResult(authorization.Allowed, failureCode, authorization.Outcome);
     }
 }

@@ -27,4 +27,5 @@ public sealed class PostgresAgentIdentityRegistry(ControlPlaneDbContext dbContex
             ? null
             : new AgentIdentity(identity.EnvironmentId, identity.CertificateFingerprint);
     }
+
 }

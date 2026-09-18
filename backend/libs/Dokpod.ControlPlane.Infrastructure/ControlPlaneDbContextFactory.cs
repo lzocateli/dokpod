@@ -10,7 +10,9 @@ public sealed class ControlPlaneDbContextFactory : IDesignTimeDbContextFactory<C
     {
         var connectionString = GetConnectionString(args);
         var options = new DbContextOptionsBuilder<ControlPlaneDbContext>()
-            .UseNpgsql(new NpgsqlConnectionStringBuilder(connectionString).ConnectionString)
+            .UseNpgsql(
+                new NpgsqlConnectionStringBuilder(connectionString).ConnectionString,
+                npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", ControlPlaneSchema.Name))
             .Options;
 
         return new ControlPlaneDbContext(options);

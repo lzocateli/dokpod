@@ -32,6 +32,7 @@ services:
       Authentication__Keycloak__Authority: http://keycloak:8080/realms/${KEYCLOAK_REALM:-dokpod}
       Authentication__Keycloak__Audience: dokpod-api
       Authentication__Keycloak__DecisionTimeoutSeconds: 15
+      ConnectionStrings__ControlPlane: ${DOKPOD_CONTROLPLANE_CONNECTION:?Defina DOKPOD_CONTROLPLANE_CONNECTION no secret externo}
     volumes:
       - ${DOKPOD_E2E_API_CERTIFICATE_PATH:?Defina o caminho absoluto do certificado PFX da API}:/certs/api.pfx:ro
     restart: "no"
@@ -44,6 +45,7 @@ services:
       identity-global:
         aliases:
           - dokpod-api
+      identity-client:
 
   bff:
     build:
@@ -104,6 +106,9 @@ networks:
   identity-global:
     external: true
     name: identity-global
+  identity-client:
+    external: true
+    name: identity-client
 
 volumes:
   dokpod-bff-keys:

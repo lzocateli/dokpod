@@ -31,6 +31,7 @@ sessão atual:
 
 - `DOKPOD_E2E_API_CERTIFICATE_PATH`, obrigatório, caminho absoluto para o PFX da API;
 - `DOKPOD_E2E_API_CERTIFICATE_PASSWORD`, opcional quando o PFX não tiver senha;
+- `DOKPOD_CONTROLPLANE_CONNECTION`, obrigatório, connection string PostgreSQL do plano de controle com `Search Path=dokpod`;
 - `DOKPOD_E2E_AGENT_CERTIFICATE_FINGERPRINT`, opcional para o laboratório de agentes;
 - `DOKPOD_E2E_AGENT_ENVIRONMENT_ID`, opcional, GUID do ambiente associado ao certificado do agente.
 
@@ -68,7 +69,31 @@ aprovada e exporte o PFX para o mesmo diretório externo.
 
 ## Validar e iniciar
 
-Execute a partir da raiz do repositório:
+O caminho recomendado é o script `tools/scripts/manage-e2e-stack.ps1`, que
+repassa o arquivo externo de variáveis de ambiente ao Docker Compose e cobre
+subir, recriar e encerrar a stack inteira ou um serviço específico. Execute a
+partir da raiz do repositório:
+
+```powershell
+./tools/scripts/manage-e2e-stack.ps1 --help
+
+./tools/scripts/manage-e2e-stack.ps1 -Action Config
+./tools/scripts/manage-e2e-stack.ps1 -Action Up -Build
+./tools/scripts/manage-e2e-stack.ps1 -Action Recreate -Service api -NoDeps
+./tools/scripts/manage-e2e-stack.ps1 -Action Down -Service agent
+./tools/scripts/manage-e2e-stack.ps1 -Action Down
+```
+
+O padrão de `-EnvFile` é `$env:APPDATA\Microsoft\UserSecrets\Dokpod\.env`. Use
+`-EnvFile` para apontar outro arquivo externo e `-ComposeProfile agent` para
+habilitar o agente. `-DryRun` exibe o comando resultante sem executá-lo.
+
+O build do serviço `web` executa `npm ci`, geração do cliente OpenAPI e
+`ng build` dentro do Dockerfile `frontend/web/Dockerfile`, usando a imagem
+`lzocateli/angular-cli`. O runtime publicado é apenas NGINX com arquivos
+estáticos; Node.js e `node_modules` não fazem parte da imagem final.
+
+Os comandos equivalentes em Docker Compose são:
 
 ```powershell
 docker compose `
@@ -85,11 +110,7 @@ docker compose `
 Para incluir o agente Docker local:
 
 ```powershell
-docker compose `
-  --env-file "$env:APPDATA\Microsoft\UserSecrets\Dokpod\.env" `
-  -f deploy/e2e/docker-compose-dokpod.yaml `
-  --profile agent `
-  up --build --wait
+./tools/scripts/manage-e2e-stack.ps1 -Action Up -Build -ComposeProfile agent
 ```
 
 O mount `/var/run/docker.sock:/run/docker.sock` concede privilégio elevado sobre
@@ -98,5 +119,8 @@ o host Docker local. Use o perfil `agent` somente em laboratório controlado.
 ## Encerrar
 
 ```powershell
-docker compose -f deploy/e2e/docker-compose-dokpod.yaml down
+./tools/scripts/manage-e2e-stack.ps1 -Action Down
 ```
+
+Para remover também os volumes nomeados da stack, use `-RemoveVolumes`. A
+operação é destrutiva e descarta as chaves de Data Protection do BFF.

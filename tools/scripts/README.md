@@ -7,3 +7,4 @@ Antes de adicionar ou alterar um script, consulte [Scripts e automação](../../
 ## Scripts disponíveis
 
 - `configure-keycloak.ps1`: reconcilia o realm `dokpod`, clients, audience, roles, grupos e integrações opcionais na instância compartilhada do Keycloak.
+- `manage-e2e-stack.ps1`: sobe, recria e encerra a stack E2E `deploy/e2e/docker-compose-dokpod.yaml`, inteira ou por serviço, usando o arquivo externo de variáveis de ambiente.

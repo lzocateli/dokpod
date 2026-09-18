@@ -6,6 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
+    "generate:api": "openapi-ts",
+    "check:api-contract": "openapi-ts --dry-run",
     "test": "ng test"
   },
   "private": true,
@@ -29,6 +31,7 @@
     "@angular/build": "^22.1.7",
     "@angular/cli": "^22.1.7",
     "@angular/compiler-cli": "^22.1.0",
+    "@hey-api/openapi-ts": "0.97.0",
     "jsdom": "^28.0.0",
     "prettier": "^3.8.1",
     "typescript": "~6.0.2",

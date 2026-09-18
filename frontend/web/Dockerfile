@@ -2,10 +2,11 @@
 FROM lzocateli/angular-cli:22.1.0-node24.15.0-bookworm AS build
 WORKDIR /src
 
-COPY frontend/web/package.json frontend/web/package-lock.json ./
+COPY --chown=node:node frontend/web/package.json frontend/web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-COPY frontend/web/ ./
+COPY --chown=node:node frontend/web/ ./
+COPY --chown=node:node contracts/openapi/ /contracts/openapi/
 
 ARG BASE_HREF=/dokpod/
 
@@ -17,7 +18,8 @@ ENTRYPOINT ["npm", "run", "start", "--", "--host", "0.0.0.0", "--port", "4200"]
 
 FROM build AS publish
 
-RUN npm run build -- --configuration production --base-href ${BASE_HREF}
+RUN npm run generate:api \
+    && npm run build -- --configuration production --base-href ${BASE_HREF}
 
 FROM lzocateli/nginx:1.28.0-bookworm AS runtime
 LABEL org.opencontainers.image.title="dokpod-web" \

@@ -7,6 +7,10 @@ public interface IEnvironmentRegistrationStore
     Task<EnvironmentRegistrationStoreResult> CreateAsync(
         EnvironmentRegistration registration,
         CancellationToken cancellationToken);
+
+    Task<EnvironmentRegistration?> GetAsync(
+        Guid environmentId,
+        CancellationToken cancellationToken);
 }
 
 public enum EnvironmentRegistrationStoreResult

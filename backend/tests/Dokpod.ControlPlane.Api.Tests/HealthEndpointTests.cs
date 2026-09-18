@@ -33,10 +33,12 @@ public sealed class HealthEndpointTests
 
         Assert.Contains("/health/live", routes);
         Assert.Contains("/health/ready", routes);
+        Assert.Contains("/health/ready/database", routes);
+        Assert.Contains("/health/ready/keycloak", routes);
     }
 
     [Fact]
-    public async Task CreateBuilder_RegistersReadinessCheck()
+    public async Task CreateBuilder_WithoutDependenciesConfigured_FailsReadinessClosed()
     {
         var builder = ApiHost.CreateBuilder(
             ["--urls=http://127.0.0.1:0"],
@@ -50,8 +52,15 @@ public sealed class HealthEndpointTests
         var provider = builder.Services.BuildServiceProvider();
         var healthCheckService = provider.GetRequiredService<HealthCheckService>();
 
-        var report = await healthCheckService.CheckHealthAsync(TestContext.Current.CancellationToken);
+        var readiness = await healthCheckService.CheckHealthAsync(
+            registration => registration.Tags.Contains("ready"),
+            TestContext.Current.CancellationToken);
+        var liveness = await healthCheckService.CheckHealthAsync(
+            _ => false,
+            TestContext.Current.CancellationToken);
 
-        Assert.Equal(HealthStatus.Healthy, report.Status);
+        Assert.Equal(HealthStatus.Unhealthy, readiness.Status);
+        Assert.Equal(HealthStatus.Healthy, liveness.Status);
+        Assert.Equal(HealthStatus.Unhealthy, readiness.Entries["postgresql"].Status);
     }
 }

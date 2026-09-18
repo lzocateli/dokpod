@@ -20,6 +20,7 @@ using Dokpod.ControlPlane.Application.Auditing;
 using Dokpod.ControlPlane.Application.Environments;
 using System.Security.Claims;
 using Dokpod.ControlPlane.Api.Endpoints;
+using Dokpod.ControlPlane.Api.Health;
 
 namespace Dokpod.ControlPlane.Api;
 
@@ -105,11 +106,17 @@ public static class ApiHost
             client.Timeout = TimeSpan.FromSeconds(
                 provider.GetRequiredService<IOptions<KeycloakAuthorizationOptions>>().Value.DecisionTimeoutSeconds);
         });
-        builder.Services.AddHealthChecks()
-            .AddCheck("controlplane-api", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["ready"]);
+        builder.Services.AddHttpClient(nameof(KeycloakReadinessHealthCheck), (provider, client) =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(
+                provider.GetRequiredService<IOptions<KeycloakAuthorizationOptions>>().Value.DecisionTimeoutSeconds);
+        });
+        var healthChecks = builder.Services.AddHealthChecks()
+            .AddCheck("controlplane-api", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["ready", "api"])
+            .AddCheck<KeycloakReadinessHealthCheck>("keycloak", tags: ["ready", "keycloak"]);
         builder.Services.AddSingleton<IAgentIdentityRegistry, UnavailableAgentIdentityRegistry>();
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
-        builder.Services.AddSingleton<AgentSessionNegotiator>();
+        builder.Services.AddScoped<AgentSessionNegotiator>();
         builder.Services.AddScoped<IAuditEventWriter, UnavailableAuditEventWriter>();
         builder.Services.AddScoped<IEnvironmentRegistrationStore, UnavailableEnvironmentRegistrationStore>();
         builder.Services.AddScoped<EnvironmentAccessService>();
@@ -118,6 +125,14 @@ public static class ApiHost
         if (!string.IsNullOrWhiteSpace(databaseConnectionString))
         {
             builder.Services.AddControlPlaneInfrastructure(databaseConnectionString);
+            healthChecks.AddCheck<PostgresReadinessHealthCheck>("postgresql", tags: ["ready", "database"]);
+        }
+        else
+        {
+            healthChecks.AddCheck(
+                "postgresql",
+                () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Unhealthy("PostgreSQL não configurado."),
+                tags: ["ready", "database"]);
         }
 
         options.ConfigureServices?.Invoke(builder.Services);
@@ -135,6 +150,14 @@ public static class ApiHost
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains("ready"),
+        }).AllowAnonymous();
+        app.MapHealthChecks("/health/ready/database", new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains("database"),
+        }).AllowAnonymous();
+        app.MapHealthChecks("/health/ready/keycloak", new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains("keycloak"),
         }).AllowAnonymous();
         app.UseAuthentication();
         app.UseAuthorization();

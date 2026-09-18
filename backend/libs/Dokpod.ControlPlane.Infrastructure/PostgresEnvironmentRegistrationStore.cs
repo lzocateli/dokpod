@@ -8,6 +8,30 @@ namespace Dokpod.ControlPlane.Infrastructure;
 public sealed class PostgresEnvironmentRegistrationStore(ControlPlaneDbContext dbContext)
     : IEnvironmentRegistrationStore
 {
+    public async Task<EnvironmentRegistration?> GetAsync(
+        Guid environmentId,
+        CancellationToken cancellationToken)
+    {
+        var entity = await dbContext.EnvironmentRegistrations
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                environment => environment.EnvironmentId == environmentId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (entity is null)
+        {
+            return null;
+        }
+
+        var scopes = JsonSerializer.Deserialize<string[]>(entity.Scopes) ?? [];
+        return EnvironmentRegistration.Create(
+            entity.EnvironmentId,
+            entity.Name,
+            entity.Host,
+            entity.Enabled,
+            scopes);
+    }
+
     public async Task<EnvironmentRegistrationStoreResult> CreateAsync(
         EnvironmentRegistration registration,
         CancellationToken cancellationToken)

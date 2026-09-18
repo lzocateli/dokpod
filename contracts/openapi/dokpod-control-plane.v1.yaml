@@ -1,0 +1,219 @@
+openapi: 3.1.0
+info:
+  title: Dokpod Control Plane API
+  version: 1.0.0
+  description: Contrato público inicial do cadastro de ambientes do Dokpod.
+servers:
+  - url: https://localhost:7443
+paths:
+  /api/v1/environments/{environmentId}:
+    get:
+      operationId: getEnvironment
+      summary: Consulta o estado cadastral de um ambiente
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: environmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Estado cadastral do ambiente autorizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentState'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /api/v1/environments:
+    post:
+      operationId: registerEnvironment
+      summary: Cadastra um ambiente
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterEnvironmentRequest'
+      responses:
+        '201':
+          description: Ambiente cadastrado.
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentCreated'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Identificador técnico opcional para correlação server-side.
+  schemas:
+    RegisterEnvironmentRequest:
+      type: object
+      required: [environmentId, name, host]
+      additionalProperties: false
+      properties:
+        environmentId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        host:
+          type: string
+          minLength: 1
+          maxLength: 255
+        enabled:
+          type: boolean
+          default: true
+        scopes:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - environment:read
+              - environment:manage
+              - container:start
+              - container:stop
+              - container:restart
+              - container:delete
+              - audit:read
+    EnvironmentCreated:
+      type: object
+      required: [environmentId]
+      additionalProperties: false
+      properties:
+        environmentId:
+          type: string
+          format: uuid
+    EnvironmentState:
+      type: object
+      required: [environmentId, name, host, enabled, scopes]
+      additionalProperties: false
+      properties:
+        environmentId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        host:
+          type: string
+          minLength: 1
+          maxLength: 255
+        enabled:
+          type: boolean
+        scopes:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - environment:read
+              - environment:manage
+              - container:start
+              - container:stop
+              - container:restart
+              - container:delete
+              - audit:read
+    ProblemDetails:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        traceId:
+          type: string
+        code:
+          type: string
+  responses:
+    InvalidRequest:
+      description: Requisição inválida.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    AuthenticationRequired:
+      description: Autenticação ausente ou inválida.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    AccessDenied:
+      description: Decisão do Keycloak negou o cadastro.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Conflict:
+      description: O ambiente já existe.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: O ambiente não foi encontrado após autorização.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    DependencyUnavailable:
+      description: Autorização ou persistência indisponível.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'

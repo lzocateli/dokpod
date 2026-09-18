@@ -19,8 +19,12 @@ public static class ControlPlaneInfrastructureServiceCollectionExtensions
         }
 
         var parsedConnectionString = new NpgsqlConnectionStringBuilder(connectionString);
-        services.AddDbContext<ControlPlaneDbContext>(options =>
-            options.UseNpgsql(parsedConnectionString.ConnectionString));
+        void ConfigureNpgsql(DbContextOptionsBuilder options) => options.UseNpgsql(
+            parsedConnectionString.ConnectionString,
+            npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", ControlPlaneSchema.Name));
+
+        services.AddDbContext<ControlPlaneDbContext>(ConfigureNpgsql);
+        services.AddSingleton<AuditEventMetrics>();
         services.AddScoped<IAgentIdentityRegistry, PostgresAgentIdentityRegistry>();
         services.AddScoped<IAuditEventWriter, PostgresAuditEventWriter>();
         services.AddScoped<IEnvironmentRegistrationStore, PostgresEnvironmentRegistrationStore>();

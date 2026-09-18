@@ -2,7 +2,7 @@
 
 **Status:** approved  
 **Data de criação:** 2026-09-10  
-**Última atualização:** 2026-09-10  
+**Última atualização:** 2026-09-17  
 **Responsáveis:** Lincoln Zocateli  
 **Origem:** IA assistida  
 **Revisor humano:** Lincoln Zocateli  
@@ -218,7 +218,7 @@ Evidências:
 - exceções do decider são convertidas em decisão `authorization_unavailable`/`Indeterminate` e auditadas antes do retorno fechado; cancelamento explícito é propagado;
 - decisões externas inválidas ou sem código de falha são normalizadas para `authorization_invalid`/`Indeterminate`;
 - testes verificam actor, scope, correlation ID e URN opaco, além de provar que nome/host não são encaminhados;
-- adapter/cliente Keycloak concreto permanece pendente, conforme o contrato aprovado de integração externa;
+- adapter UMA `KeycloakAuthorizationDecisionService` implementado e registrado na API, com timeout, resposta inválida e transporte indisponível convertidos em decisão indeterminada;
 - porta `IEnvironmentRegistrationStore`, caso de uso de registro e implementação PostgreSQL adicionados;
 - `POST /api/v1/environments` exige autenticação, deriva o ator do `sub`, usa o Bearer somente no salto server-side e retorna `application/problem+json` para negação, conflito ou indisponibilidade;
 - persistência ocorre somente depois da decisão autorizada e da auditoria; rota e ordem autorização/auditoria/persistência cobertas por testes focados;
@@ -227,7 +227,7 @@ Evidências:
 
 ### P03-06: API, contrato e observabilidade
 
-**Status:** not-started  
+**Status:** in-progress  
 **Responsável:** Lincoln Zocateli  
 **Dependências:** P03-05
 
@@ -251,7 +251,27 @@ Validação:
 
 Evidências:
 
-- pendente.
+- contrato OpenAPI 3.1 inicial criado em `contracts/openapi/dokpod-control-plane.v1.yaml`, sem entidades EF, cobrindo o cadastro e respostas `201`, `400`, `401`, `403`, `409` e `503`;
+- validação de UUID, nome, host e scopes ocorre antes da persistência e respeita os limites publicados no contrato;
+- respostas controladas usam `application/problem+json`, código estável, `instance` e `traceId`;
+- decisões `Denied` retornam `403`; decisões `Indeterminate`, timeout, autorização inválida e dependências indisponíveis falham fechadas com `503`;
+- `GET /api/v1/environments/{environmentId}` expõe o estado cadastral somente após decisão `environment:read` do Keycloak, sem consultar nome, host ou scopes antes da autorização;
+- readiness separado para API, PostgreSQL e Keycloak em `/health/ready`, `/health/ready/database` e `/health/ready/keycloak`; liveness permanece independente;
+- Compose conecta somente a API à rede externa `identity-client` e exige `DOKPOD_CONTROLPLANE_CONNECTION` de secret externo;
+- validação focada aprovada com 7 testes de domínio e suíte da API com 48 aprovados, 4 integrações PostgreSQL ignoradas e 0 falhas;
+- `AuditEventMetrics` registra tentativas, duração, falhas e conflitos de idempotência sem labels com conteúdo sensível;
+- secret externo corrigido para a porta `5432` e credencial da instância compartilhada; migrations aplicadas no PostgreSQL local;
+- testes reais `PostgresAuditSchemaIntegrationTests` aprovados (4/4), além dos testes do writer (4/4);
+- migration `202609170003_IsolateControlPlaneSchema` move tabelas, partições, funções e histórico EF para o schema `dokpod`;
+- catálogo PostgreSQL verificado sem objetos Dokpod restantes em `public`, mantendo o banco compartilhado `keycloak` como instância local de laboratório;
+- teste PostgreSQL real cobre round-trip do store de ambientes pelo schema `dokpod`;
+- suíte completa da API aprovada com PostgreSQL real e isolado: 55 testes aprovados, 0 falhas, 0 ignorados;
+- teste de contrato OpenAPI cobre rotas de cadastro/estado, status esperados, `application/problem+json` e ausência de entidades EF;
+- cliente TypeScript gerado em `frontend/web/src/app/data-access/generated/control-plane` por `@hey-api/openapi-ts` 0.97.0, licença MIT e compatível com TypeScript 6;
+- `npm audit --audit-level=high` do frontend aprovado após fixar `@hey-api/openapi-ts` 0.97.0; permanece um achado moderado dev-only no gerador, registrado como risco residual até versão sem regressão de alto impacto;
+- geração, `check:api-contract` e build Angular aprovados após geração do cliente;
+- suíte completa da API aprovada com PostgreSQL real e isolado após teste de contrato: 56 testes aprovados, 0 falhas, 0 ignorados;
+- separação por banco dedicado continua como decisão operacional de ambiente, mas não bloqueia mais o isolamento lógico do laboratório compartilhado.
 
 ### P03-07: Testes de segurança, recuperação e operação
 
@@ -332,3 +352,4 @@ Evidências:
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-10 | plano | - | draft | Plano criado para detalhar as dependências da persistência append-only do P-03; aprovação humana pendente. | IA assistida |
 | 2026-09-10 | P03-01 | not-started | in-progress | ADR 2026-0004 criada como `proposed`; decisão humana sobre infraestrutura, privilégios e migration pendente. | IA assistida |
+| 2026-09-17 | P03-06 | not-started | in-progress | contrato inicial de cadastro, ProblemDetails, readiness por dependência e composição PostgreSQL no Compose implementados; métricas, leitura e integração real permanecem pendentes. | IA assistida |

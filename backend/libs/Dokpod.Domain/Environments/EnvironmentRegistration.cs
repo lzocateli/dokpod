@@ -31,6 +31,9 @@ public sealed record EnvironmentRegistration(
     bool Enabled,
     IReadOnlySet<string> Scopes)
 {
+    public const int MaxNameLength = 128;
+    public const int MaxHostLength = 255;
+
     public static EnvironmentRegistration Create(
         Guid environmentId,
         string name,
@@ -38,9 +41,19 @@ public sealed record EnvironmentRegistration(
         bool enabled,
         IEnumerable<string> scopes)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        if (environmentId == Guid.Empty)
         {
-            throw new ArgumentException("Environment name is required.", nameof(name));
+            throw new ArgumentException("Environment ID is required.", nameof(environmentId));
+        }
+
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > MaxNameLength)
+        {
+            throw new ArgumentException("Environment name has an invalid format.", nameof(name));
+        }
+
+        if (string.IsNullOrWhiteSpace(host) || host.Trim().Length > MaxHostLength)
+        {
+            throw new ArgumentException("Environment host has an invalid format.", nameof(host));
         }
 
         var resolvedScopes = new HashSet<string>(

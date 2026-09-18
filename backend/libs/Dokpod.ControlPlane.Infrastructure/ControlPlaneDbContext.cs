@@ -12,6 +12,7 @@ public sealed class ControlPlaneDbContext(DbContextOptions<ControlPlaneDbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasDefaultSchema(ControlPlaneSchema.Name);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ControlPlaneDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
     }

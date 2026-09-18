@@ -1,5 +1,7 @@
+using Dokpod.ControlPlane.Application.Environments;
 using Dokpod.ControlPlane.Infrastructure;
 using Dokpod.Domain.Auditing;
+using Dokpod.Domain.Environments;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -22,8 +24,8 @@ public sealed class PostgresAuditSchemaIntegrationTests
         var monthlyPartition = await GetPartitionAsync(context, monthlyEventId);
         var defaultPartition = await GetPartitionAsync(context, defaultEventId);
 
-        Assert.Equal("audit_events_2026_09", monthlyPartition);
-        Assert.Equal("audit_events_default", defaultPartition);
+        Assert.Equal("dokpod.audit_events_2026_09", monthlyPartition);
+        Assert.Equal("dokpod.audit_events_default", defaultPartition);
     }
 
     [Fact]
@@ -37,7 +39,7 @@ public sealed class PostgresAuditSchemaIntegrationTests
         const string changedActor = "changed";
 
         var exception = await Assert.ThrowsAnyAsync<Exception>(async () =>
-            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE audit_events SET actor_id = {changedActor} WHERE event_id = {eventId}", TestContext.Current.CancellationToken));
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE dokpod.audit_events SET actor_id = {changedActor} WHERE event_id = {eventId}", TestContext.Current.CancellationToken));
 
         Assert.Contains("append-only", exception.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -94,6 +96,41 @@ public sealed class PostgresAuditSchemaIntegrationTests
         Assert.Contains(tasks, task => task.Exception?.GetBaseException() is InvalidOperationException);
     }
 
+    [Fact]
+    public async Task EnvironmentRegistrationStore_RoundTripsThroughDokpodSchema()
+    {
+        await using var context = CreateContextOrSkip();
+        await using var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        var store = new PostgresEnvironmentRegistrationStore(context);
+        var registration = EnvironmentRegistration.Create(
+            Guid.NewGuid(),
+            "integration-" + Guid.NewGuid().ToString("N")[..12],
+            "lab-host",
+            enabled: true,
+            [EnvironmentResourceScopes.Read, EnvironmentResourceScopes.Manage]);
+
+        var created = await store.CreateAsync(registration, TestContext.Current.CancellationToken);
+        var persisted = await store.GetAsync(registration.EnvironmentId, TestContext.Current.CancellationToken);
+        var schemaRows = await context.Database
+            .SqlQueryRaw<string>("""
+                SELECT namespace.nspname AS "Value"
+                FROM dokpod.environments environments
+                JOIN pg_class relation ON relation.oid = environments.tableoid
+                JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+                WHERE environments.environment_id = {0}
+                """, registration.EnvironmentId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(EnvironmentRegistrationStoreResult.Created, created);
+        Assert.NotNull(persisted);
+        Assert.Equal(registration.EnvironmentId, persisted.EnvironmentId);
+        Assert.Equal(registration.Name, persisted.Name);
+        Assert.Equal(registration.Host, persisted.Host);
+        Assert.Equal(registration.Enabled, persisted.Enabled);
+        Assert.True(registration.Scopes.SetEquals(persisted.Scopes));
+        Assert.Equal("dokpod", Assert.Single(schemaRows));
+    }
+
     private static ControlPlaneDbContext CreateContextOrSkip()
     {
         var connectionString = Environment.GetEnvironmentVariable("DOKPOD_TEST_POSTGRES_CONNECTION");
@@ -115,7 +152,7 @@ public sealed class PostgresAuditSchemaIntegrationTests
         DateTimeOffset occurredAtUtc)
     {
         await context.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO audit_events (
+            INSERT INTO dokpod.audit_events (
                 event_id,
                 occurred_at_utc,
                 correlation_id,
@@ -139,7 +176,13 @@ public sealed class PostgresAuditSchemaIntegrationTests
     private static async Task<string> GetPartitionAsync(ControlPlaneDbContext context, Guid eventId)
     {
         var rows = await context.Database
-            .SqlQueryRaw<string>("SELECT tableoid::regclass::text AS \"Value\" FROM audit_events WHERE event_id = {0}", eventId)
+            .SqlQueryRaw<string>("""
+                SELECT namespace.nspname || '.' || relation.relname AS "Value"
+                FROM dokpod.audit_events audit_events
+                JOIN pg_class relation ON relation.oid = audit_events.tableoid
+                JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+                WHERE audit_events.event_id = {0}
+                """, eventId)
             .ToListAsync(TestContext.Current.CancellationToken);
 
         return Assert.Single(rows);
