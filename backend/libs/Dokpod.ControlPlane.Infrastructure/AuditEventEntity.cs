@@ -11,6 +11,7 @@ public sealed class AuditEventEntity
     public string ActorId { get; set; } = string.Empty;
     public string Action { get; set; } = string.Empty;
     public Guid EnvironmentId { get; set; }
+    public Guid? CommandId { get; set; }
     public int Outcome { get; set; }
     public string? FailureCode { get; set; }
 }

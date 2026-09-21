@@ -33,26 +33,36 @@ public sealed class ControlPlaneHttpSurfaceTests
         var endpoints = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(dataSource => dataSource.Endpoints)
             .OfType<RouteEndpoint>()
-            .ToDictionary(endpoint => endpoint.RoutePattern.RawText!, StringComparer.Ordinal);
+            .ToArray();
+        var routes = endpoints
+            .Select(endpoint => endpoint.RoutePattern.RawText!)
+            .ToHashSet(StringComparer.Ordinal);
 
-        Assert.Contains("/api/v1/session", endpoints.Keys);
-        Assert.Contains("/api/v1/environments", endpoints.Keys);
-        Assert.Contains("/api/v1/environments/{environmentId:guid}", endpoints.Keys);
-        Assert.Contains("/api/v1/environments/{environmentId:guid}/containers", endpoints.Keys);
+        Assert.Contains("/api/v1/session", routes);
+        Assert.Contains("/api/v1/environments", routes);
+        Assert.Contains("/api/v1/environments/{environmentId:guid}", routes);
+        Assert.Contains("/api/v1/environments/{environmentId:guid}/containers", routes);
         Assert.Contains(
             "/api/v1/environments/{environmentId:guid}/containers/{containerId}/commands",
-            endpoints.Keys);
-        Assert.Contains("/hubs/control-plane", endpoints.Keys);
-        Assert.Contains("/health/live", endpoints.Keys);
-        Assert.Contains("/health/ready", endpoints.Keys);
-        Assert.Contains("/health/ready/database", endpoints.Keys);
-        Assert.Contains("/health/ready/keycloak", endpoints.Keys);
-        Assert.NotNull(endpoints["/api/v1/session"].Metadata.GetMetadata<IAuthorizeData>());
-        Assert.NotNull(endpoints["/api/v1/environments"].Metadata.GetMetadata<IAuthorizeData>());
-        Assert.NotNull(endpoints["/api/v1/environments/{environmentId:guid}"].Metadata.GetMetadata<IAuthorizeData>());
-        Assert.NotNull(endpoints["/api/v1/environments/{environmentId:guid}/containers"].Metadata.GetMetadata<IAuthorizeData>());
-        Assert.NotNull(endpoints["/api/v1/environments/{environmentId:guid}/containers/{containerId}/commands"].Metadata.GetMetadata<IAuthorizeData>());
-        Assert.NotNull(endpoints["/hubs/control-plane"].Metadata.GetMetadata<IAuthorizeData>());
+            routes);
+        Assert.Contains(
+            "/api/v1/environments/{environmentId:guid}/commands/{commandId:guid}",
+            routes);
+        Assert.Contains("/hubs/control-plane", routes);
+        Assert.Contains("/health/live", routes);
+        Assert.Contains("/health/ready", routes);
+        Assert.Contains("/health/ready/database", routes);
+        Assert.Contains("/health/ready/keycloak", routes);
+        Assert.All(
+            endpoints.Where(endpoint => endpoint.RoutePattern.RawText is
+                "/api/v1/session"
+                or "/api/v1/environments"
+                or "/api/v1/environments/{environmentId:guid}"
+                or "/api/v1/environments/{environmentId:guid}/containers"
+                or "/api/v1/environments/{environmentId:guid}/containers/{containerId}/commands"
+                or "/api/v1/environments/{environmentId:guid}/commands/{commandId:guid}"
+                or "/hubs/control-plane"),
+            endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<IAuthorizeData>()));
 
         var healthChecks = app.Services
             .GetRequiredService<IOptions<HealthCheckServiceOptions>>()

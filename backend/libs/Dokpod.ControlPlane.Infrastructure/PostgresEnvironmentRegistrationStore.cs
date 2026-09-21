@@ -8,6 +8,37 @@ namespace Dokpod.ControlPlane.Infrastructure;
 public sealed class PostgresEnvironmentRegistrationStore(ControlPlaneDbContext dbContext)
     : IEnvironmentRegistrationStore
 {
+    public async Task<EnvironmentRegistrationPage> ListAsync(
+        Guid? afterEnvironmentId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.EnvironmentRegistrations.AsNoTracking();
+        if (afterEnvironmentId is not null)
+        {
+            query = query.Where(environment =>
+                environment.EnvironmentId.CompareTo(afterEnvironmentId.Value) > 0);
+        }
+
+        var entities = await query
+            .OrderBy(environment => environment.EnvironmentId)
+            .Take(limit + 1)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var hasMore = entities.Count > limit;
+        if (hasMore)
+        {
+            entities.RemoveAt(limit);
+        }
+
+        var registrations = entities
+            .Select(ToRegistration)
+            .ToArray();
+        return new EnvironmentRegistrationPage(
+            registrations,
+            hasMore ? registrations[^1].EnvironmentId : null);
+    }
+
     public async Task<EnvironmentRegistration?> GetAsync(
         Guid environmentId,
         CancellationToken cancellationToken)
@@ -23,13 +54,7 @@ public sealed class PostgresEnvironmentRegistrationStore(ControlPlaneDbContext d
             return null;
         }
 
-        var scopes = JsonSerializer.Deserialize<string[]>(entity.Scopes) ?? [];
-        return EnvironmentRegistration.Create(
-            entity.EnvironmentId,
-            entity.Name,
-            entity.Host,
-            entity.Enabled,
-            scopes);
+        return ToRegistration(entity);
     }
 
     public async Task<EnvironmentRegistrationStoreResult> CreateAsync(
@@ -67,5 +92,16 @@ public sealed class PostgresEnvironmentRegistrationStore(ControlPlaneDbContext d
         {
             throw new InvalidOperationException("Environment registration could not be persisted.", exception);
         }
+    }
+
+    private static EnvironmentRegistration ToRegistration(EnvironmentRegistrationEntity entity)
+    {
+        var scopes = JsonSerializer.Deserialize<string[]>(entity.Scopes) ?? [];
+        return EnvironmentRegistration.Create(
+            entity.EnvironmentId,
+            entity.Name,
+            entity.Host,
+            entity.Enabled,
+            scopes);
     }
 }

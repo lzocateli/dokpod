@@ -1,0 +1,135 @@
+<main class="environment-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">PLANO DE CONTROLE / AMBIENTES</p>
+      <h1>Ambientes</h1>
+      <p class="intro">Hosts e engines que você tem permissão para consultar.</p>
+    </div>
+    <button type="button" class="primary" (click)="openRegistration()">Cadastrar ambiente</button>
+  </header>
+
+  @if (registeredEnvironmentId()) {
+    <div class="notice success" role="status">
+      <strong>Ambiente cadastrado.</strong>
+      Ele já aparece no catálogo quando sua permissão de leitura estiver ativa.
+    </div>
+  }
+
+  @if (registrationOpen()) {
+    <section class="registration" aria-labelledby="registration-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">NOVO AMBIENTE</p>
+          <h2 id="registration-title">Cadastrar host ou engine</h2>
+        </div>
+        <button type="button" class="quiet" (click)="closeRegistration()">Cancelar</button>
+      </div>
+
+      <p class="registration-note">
+        O ambiente e a permissão de gestão devem estar provisionados no Keycloak. Este cadastro
+        não cria acesso para usuários.
+      </p>
+
+      <form [formGroup]="registrationForm" (ngSubmit)="register()">
+        <div class="form-grid">
+          <div class="field wide">
+            <label for="environment-id">Identificador provisionado</label>
+            <input id="environment-id" formControlName="environmentId" autocomplete="off" />
+            @if (registrationForm.controls.environmentId.touched && registrationForm.controls.environmentId.invalid) {
+              <p class="field-error" role="alert">Informe um UUID válido.</p>
+            }
+          </div>
+          <div class="field">
+            <label for="environment-name">Nome</label>
+            <input id="environment-name" formControlName="name" autocomplete="organization" />
+            @if (registrationForm.controls.name.touched && registrationForm.controls.name.invalid) {
+              <p class="field-error" role="alert">Informe um nome com até 128 caracteres.</p>
+            }
+          </div>
+          <div class="field">
+            <label for="environment-host">Host</label>
+            <input id="environment-host" formControlName="host" autocomplete="off" placeholder="docker-01" />
+            @if (registrationForm.controls.host.touched && registrationForm.controls.host.invalid) {
+              <p class="field-error" role="alert">Informe o nome do host.</p>
+            }
+          </div>
+        </div>
+        <label class="toggle-row">
+          <input type="checkbox" formControlName="enabled" />
+          Ambiente habilitado
+        </label>
+
+        @if (facade.registrationError(); as error) {
+          <div class="notice error" role="alert">
+            <strong>{{ error.title }}</strong>
+            {{ error.detail }}
+          </div>
+        }
+
+        <button type="submit" class="primary" [disabled]="facade.registering()">
+          {{ facade.registering() ? 'Cadastrando…' : 'Cadastrar ambiente' }}
+        </button>
+      </form>
+    </section>
+  }
+
+  <section class="catalog" aria-labelledby="catalog-title">
+    <div class="catalog-heading">
+      <h2 id="catalog-title">Seus ambientes</h2>
+      @if (!facade.loading()) {
+        <span>{{ facade.environments().length }} nesta página</span>
+      }
+    </div>
+
+    @if (facade.loading()) {
+      <div class="message" aria-live="polite">
+        <p class="eyebrow">CONSULTANDO AUTORIZAÇÕES</p>
+        <h2>Carregando ambientes…</h2>
+      </div>
+    } @else if (facade.error(); as error) {
+      <div class="message error" role="alert">
+        <p class="eyebrow">ERRO {{ error.status ?? 'LOCAL' }}</p>
+        <h2>{{ error.title }}</h2>
+        <p>{{ error.detail }}</p>
+        @if (error.status === 401) {
+          <button type="button" class="primary" (click)="signIn()">Entrar novamente</button>
+        } @else {
+          <button type="button" class="primary" (click)="facade.load()">Tentar novamente</button>
+        }
+      </div>
+    } @else if (facade.environments().length === 0) {
+      <div class="message empty">
+        <p class="eyebrow">CATÁLOGO VAZIO</p>
+        <h2>Nenhum ambiente disponível.</h2>
+        <p>Cadastre um ambiente provisionado ou solicite permissão de leitura ao administrador.</p>
+        <button type="button" class="primary" (click)="openRegistration()">Cadastrar ambiente</button>
+      </div>
+    } @else {
+      <div class="environment-list">
+        @for (environment of facade.environments(); track environment.environmentId) {
+          <article class="environment-row">
+            <div class="environment-identity">
+              <span class="status-mark" [class.disabled]="!environment.enabled" aria-hidden="true"></span>
+              <div>
+                <h3>{{ environment.name }}</h3>
+                <p>{{ environment.host }}</p>
+              </div>
+            </div>
+            <code>{{ environment.environmentId }}</code>
+            <div class="environment-state">
+              <span>{{ environment.enabled ? 'Habilitado' : 'Desabilitado' }}</span>
+              @if (environment.enabled) {
+                <a [routerLink]="['/environments', environment.environmentId, 'containers']">Ver containers</a>
+              }
+            </div>
+          </article>
+        }
+      </div>
+      @if (facade.nextCursor()) {
+        <button type="button" class="load-more" [disabled]="facade.loadingMore()" (click)="facade.load(true)">
+          {{ facade.loadingMore() ? 'Carregando…' : 'Carregar mais ambientes' }}
+        </button>
+      }
+    }
+  </section>
+</main>

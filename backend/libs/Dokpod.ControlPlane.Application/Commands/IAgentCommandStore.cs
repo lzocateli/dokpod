@@ -1,4 +1,5 @@
 using Dokpod.Domain.Commands;
+using Dokpod.Domain.Auditing;
 
 namespace Dokpod.ControlPlane.Application.Commands;
 
@@ -17,6 +18,20 @@ public sealed record PersistedAgentCommand(
     ControlPlaneCommandState State,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);
+
+public sealed record AgentCommandStatusSnapshot(
+    Guid EnvironmentId,
+    Guid CommandId,
+    AgentCommandKind Kind,
+    string ContainerId,
+    string ExpectedContainerRevision,
+    ControlPlaneCommandState State,
+    string? FailureCode,
+    string? ObservedContainerRevision,
+    DateTimeOffset DeadlineUtc,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset UpdatedAtUtc,
+    DateTimeOffset? CompletedAtUtc);
 
 public enum AgentCommandEnqueueResult
 {
@@ -43,12 +58,27 @@ public enum AgentCommandStatusUpdateResult
 
 public interface IAgentCommandStore
 {
+    Task<AgentCommandStatusSnapshot?> GetAsync(
+        Guid environmentId,
+        Guid commandId,
+        CancellationToken cancellationToken);
+
     Task<AgentCommandEnqueueResult> EnqueueAsync(
         PersistedAgentCommand command,
         CancellationToken cancellationToken);
 
+    Task<AgentCommandEnqueueResult> EnqueueAuditedAsync(
+        PersistedAgentCommand command,
+        AuditEvent auditEvent,
+        CancellationToken cancellationToken);
+
     Task<AgentCommandStatusUpdateResult> ApplyStatusAsync(
         AgentCommandStatusUpdate update,
+        CancellationToken cancellationToken);
+
+    Task<AgentCommandStatusUpdateResult> ApplyStatusAuditedAsync(
+        AgentCommandStatusUpdate update,
+        AuditEvent auditEvent,
         CancellationToken cancellationToken);
 
     Task<int> ExpireNonTerminalAsync(

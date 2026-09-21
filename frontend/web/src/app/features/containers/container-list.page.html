@@ -1,0 +1,72 @@
+<main class="inventory-page">
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/">Ambientes</a>
+      <p class="eyebrow">INVENTÁRIO / {{ environmentId() }}</p>
+      <h1>{{ facade.environment()?.name ?? 'Containers' }}</h1>
+      <p class="host">{{ facade.environment()?.host ?? 'Consultando ambiente…' }}</p>
+    </div>
+    <button type="button" [disabled]="facade.loading()" (click)="facade.load(environmentId())">Atualizar</button>
+  </header>
+
+  @if (facade.observedAt()) {
+    <div class="inventory-meta" [class.stale]="stale()" aria-live="polite">
+      <span>{{ facade.containers().length }} containers</span>
+      <span>Observado em {{ facade.observedAt() | date: 'dd/MM/yyyy HH:mm:ss' }}</span>
+      @if (stale()) { <strong>Inventário desatualizado ({{ facade.ageSeconds() }}s)</strong> }
+    </div>
+  }
+
+  @if (facade.loading()) {
+    <section class="message" aria-live="polite"><p class="eyebrow">SINCRONIZANDO</p><h2>Carregando inventário…</h2></section>
+  } @else if (facade.error(); as error) {
+    <section class="message error" role="alert">
+      <p class="eyebrow">ERRO {{ error.status ?? 'LOCAL' }}</p><h2>{{ error.title }}</h2><p>{{ error.detail }}</p>
+      <button type="button" (click)="facade.load(environmentId())">Tentar novamente</button>
+    </section>
+  } @else if (facade.containers().length === 0) {
+    <section class="message"><p class="eyebrow">INVENTÁRIO VAZIO</p><h2>Nenhum container reconciliado.</h2><p>O agente ainda não publicou containers para este ambiente.</p></section>
+  } @else {
+    <div class="container-list">
+      @for (container of facade.containers(); track container.containerId) {
+        <article class="container-row">
+          <div class="identity">
+            <div class="state-mark" [attr.data-state]="container.state" aria-hidden="true"></div>
+            <div><h2>{{ container.name }}</h2><p>{{ container.imageReference }}</p></div>
+          </div>
+          <dl>
+            <div><dt>Estado</dt><dd>{{ container.state }}</dd></div>
+            <div><dt>Revisão</dt><dd>{{ container.revision }}</dd></div>
+            <div><dt>Observado</dt><dd>{{ container.observedAt | date: 'HH:mm:ss' }}</dd></div>
+          </dl>
+          <div class="actions" aria-label="Ações do container">
+            @if (can('start')) { <button type="button" [disabled]="isBusy(container.containerId)" (click)="run(container, 'start')">Iniciar</button> }
+            @if (can('stop')) { <button type="button" [disabled]="isBusy(container.containerId)" (click)="run(container, 'stop')">Parar</button> }
+            @if (can('restart')) { <button type="button" [disabled]="isBusy(container.containerId)" (click)="run(container, 'restart')">Reiniciar</button> }
+            @if (can('delete')) { <button type="button" class="danger" [disabled]="isBusy(container.containerId)" (click)="run(container, 'delete')">Excluir</button> }
+          </div>
+          @if (facade.operations()[container.containerId]; as operation) {
+            <div class="operation" [attr.data-state]="operation.state" aria-live="polite">
+              <strong>{{ operation.action }}</strong> · {{ operation.state }}
+              @if (operation.failureCode) { <span>{{ operation.failureCode }}</span> }
+              @if (!isBusy(container.containerId)) { <button type="button" (click)="facade.clearOperation(container.containerId)">Fechar</button> }
+            </div>
+          }
+        </article>
+      }
+    </div>
+    @if (facade.nextCursor()) {
+      <button type="button" class="load-more" [disabled]="facade.loadingMore()" (click)="facade.load(environmentId(), true)">{{ facade.loadingMore() ? 'Carregando…' : 'Carregar mais' }}</button>
+    }
+  }
+</main>
+
+@if (pendingDelete(); as container) {
+  <div class="dialog-backdrop">
+    <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+      <p class="eyebrow">AÇÃO DESTRUTIVA</p><h2 id="delete-title">Excluir {{ container.name }}?</h2>
+      <p>O container será removido. Volumes não serão excluídos implicitamente.</p>
+      <div class="dialog-actions"><button type="button" (click)="pendingDelete.set(null)">Cancelar</button><button type="button" class="danger" (click)="confirmDelete()">Excluir container</button></div>
+    </section>
+  </div>
+}

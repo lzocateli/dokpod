@@ -1,4 +1,5 @@
 using Dokpod.ControlPlane.Application.Commands;
+using Dokpod.Domain.Auditing;
 using Dokpod.Domain.Commands;
 using Xunit;
 
@@ -17,7 +18,9 @@ public sealed class AgentCommandQueueServiceTests
         var service = new AgentCommandQueueService(store, deliveryQueue, new FixedTimeProvider(Now));
         var command = CreateCommand();
 
-        var result = await service.EnqueueAsync(command, TestContext.Current.CancellationToken);
+        var auditEvent = CreateAuditEvent(command);
+
+        var result = await service.EnqueueAsync(command, auditEvent, TestContext.Current.CancellationToken);
 
         Assert.Equal(AgentCommandEnqueueResult.Created, result);
         Assert.NotNull(store.Command);
@@ -25,6 +28,7 @@ public sealed class AgentCommandQueueServiceTests
         Assert.Equal(ControlPlaneCommandState.Pending, store.Command.State);
         Assert.Equal(Now, store.Command.CreatedAtUtc);
         Assert.Equal(Now, store.Command.UpdatedAtUtc);
+        Assert.Same(auditEvent, store.AuditEvent);
         Assert.Equal(store.Command, deliveryQueue.Command);
     }
 
@@ -38,7 +42,11 @@ public sealed class AgentCommandQueueServiceTests
         var deliveryQueue = new RecordingDeliveryQueue();
         var service = new AgentCommandQueueService(store, deliveryQueue, new FixedTimeProvider(Now));
 
-        var result = await service.EnqueueAsync(CreateCommand(), TestContext.Current.CancellationToken);
+        var command = CreateCommand();
+        var result = await service.EnqueueAsync(
+            command,
+            CreateAuditEvent(command),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(storeResult, result);
         Assert.Null(deliveryQueue.Command);
@@ -52,7 +60,10 @@ public sealed class AgentCommandQueueServiceTests
         var command = CreateCommand() with { DeadlineUtc = Now };
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(
-            () => service.EnqueueAsync(command, TestContext.Current.CancellationToken));
+            () => service.EnqueueAsync(
+                command,
+                CreateAuditEvent(command),
+                TestContext.Current.CancellationToken));
 
         Assert.Equal("command", exception.ParamName);
         Assert.Null(store.Command);
@@ -66,7 +77,10 @@ public sealed class AgentCommandQueueServiceTests
         var command = CreateCommand() with { PayloadHash = "sha256:abc" };
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(
-            () => service.EnqueueAsync(command, TestContext.Current.CancellationToken));
+            () => service.EnqueueAsync(
+                command,
+                CreateAuditEvent(command),
+                TestContext.Current.CancellationToken));
 
         Assert.Equal("command", exception.ParamName);
         Assert.Null(store.Command);
@@ -83,6 +97,18 @@ public sealed class AgentCommandQueueServiceTests
             Now.AddMinutes(1),
             8);
 
+    private static AuditEvent CreateAuditEvent(AgentCommand command) =>
+        AuditEvent.Create(
+            Guid.NewGuid(),
+            Now,
+            Guid.NewGuid(),
+            AuditActorKind.User,
+            "user-1",
+            "container.restart",
+            command.EnvironmentId,
+            AuditOutcome.Succeeded,
+            commandId: command.CommandId);
+
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => utcNow;
@@ -91,6 +117,13 @@ public sealed class AgentCommandQueueServiceTests
     private sealed class RecordingAgentCommandStore(AgentCommandEnqueueResult result) : IAgentCommandStore
     {
         public PersistedAgentCommand? Command { get; private set; }
+        public AuditEvent? AuditEvent { get; private set; }
+
+        public Task<AgentCommandStatusSnapshot?> GetAsync(
+            Guid environmentId,
+            Guid commandId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         public Task<AgentCommandEnqueueResult> EnqueueAsync(
             PersistedAgentCommand command,
@@ -100,8 +133,23 @@ public sealed class AgentCommandQueueServiceTests
             return Task.FromResult(result);
         }
 
+        public Task<AgentCommandEnqueueResult> EnqueueAuditedAsync(
+            PersistedAgentCommand command,
+            AuditEvent auditEvent,
+            CancellationToken cancellationToken)
+        {
+            AuditEvent = auditEvent;
+            return EnqueueAsync(command, cancellationToken);
+        }
+
         public Task<AgentCommandStatusUpdateResult> ApplyStatusAsync(
             AgentCommandStatusUpdate update,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<AgentCommandStatusUpdateResult> ApplyStatusAuditedAsync(
+            AgentCommandStatusUpdate update,
+            AuditEvent auditEvent,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 

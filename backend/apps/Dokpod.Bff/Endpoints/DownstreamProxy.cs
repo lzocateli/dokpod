@@ -13,6 +13,7 @@ public static class DownstreamProxy
         "Accept-Encoding",
         "Accept-Language",
         "Cache-Control",
+        "Idempotency-Key",
         "If-Match",
         "If-Modified-Since",
         "If-None-Match",
@@ -69,16 +70,8 @@ public static class DownstreamProxy
         }
 
         var relativePath = context.Request.Path.Value ?? string.Empty;
-        if (relativePath.StartsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
-        {
-            relativePath = relativePath["/api/v1".Length..];
-        }
-        else if (relativePath.StartsWith("/hubs", StringComparison.OrdinalIgnoreCase))
-        {
-            relativePath = relativePath["/hubs".Length..];
-        }
 
-        if (HasTraversalSegment(relativePath))
+        if (HasUnsafePath(relativePath))
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new { error = "invalid_downstream_path" });
@@ -245,11 +238,12 @@ public static class DownstreamProxy
         await limitedBody.CopyToAsync(context.Response.Body, cancellationToken);
     }
 
-    private static bool HasTraversalSegment(string path)
+    private static bool HasUnsafePath(string path)
     {
         var decodedPath = Uri.UnescapeDataString(path);
-        return decodedPath.Split('/', StringSplitOptions.None)
-            .Any(segment => segment is "." or "..");
+        return decodedPath.Contains("://", StringComparison.Ordinal)
+            || decodedPath.Split('/', StringSplitOptions.None)
+                .Any(segment => segment is "." or "..");
     }
 
     private static async Task ProxyWebSocketAsync(

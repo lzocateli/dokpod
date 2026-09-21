@@ -1,4 +1,5 @@
 using Dokpod.Domain.Commands;
+using Dokpod.Domain.Auditing;
 
 namespace Dokpod.ControlPlane.Application.Commands;
 
@@ -9,9 +10,11 @@ public sealed class AgentCommandQueueService(
 {
     public async Task<AgentCommandEnqueueResult> EnqueueAsync(
         AgentCommand command,
+        AuditEvent auditEvent,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(auditEvent);
 
         var now = timeProvider.GetUtcNow();
         if (command.EnvironmentId == Guid.Empty || command.CommandId == Guid.Empty)
@@ -58,7 +61,10 @@ public sealed class AgentCommandQueueService(
             now,
             now);
 
-        var result = await commandStore.EnqueueAsync(persistedCommand, cancellationToken)
+        var result = await commandStore.EnqueueAuditedAsync(
+            persistedCommand,
+            auditEvent,
+            cancellationToken)
             .ConfigureAwait(false);
         if (result == AgentCommandEnqueueResult.Created)
         {

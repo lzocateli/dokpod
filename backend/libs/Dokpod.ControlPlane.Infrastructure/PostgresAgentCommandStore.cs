@@ -1,11 +1,53 @@
 using Dokpod.ControlPlane.Application.Commands;
+using Dokpod.ControlPlane.Application.Auditing;
+using Dokpod.Domain.Auditing;
+using Dokpod.Domain.Commands;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dokpod.ControlPlane.Infrastructure;
 
-public sealed class PostgresAgentCommandStore(ControlPlaneDbContext dbContext) : IAgentCommandStore
+public sealed class PostgresAgentCommandStore(
+    ControlPlaneDbContext dbContext,
+    IAuditEventWriter auditEventWriter) : IAgentCommandStore
 {
     private const int MaximumDispatchBatchSize = 100;
+    private const int MaximumExpirationBatchSize = 100;
+
+    public PostgresAgentCommandStore(ControlPlaneDbContext dbContext)
+        : this(dbContext, new PostgresAuditEventWriter(dbContext))
+    {
+    }
+
+    public Task<AgentCommandStatusSnapshot?> GetAsync(
+        Guid environmentId,
+        Guid commandId,
+        CancellationToken cancellationToken)
+    {
+        if (environmentId == Guid.Empty || commandId == Guid.Empty)
+        {
+            throw new ArgumentException("Command identity is required.");
+        }
+
+        return dbContext.AgentCommands
+            .AsNoTracking()
+            .Where(command =>
+                command.EnvironmentId == environmentId &&
+                command.CommandId == commandId)
+            .Select(command => new AgentCommandStatusSnapshot(
+                command.EnvironmentId,
+                command.CommandId,
+                command.Kind,
+                command.ContainerId,
+                command.ExpectedContainerRevision,
+                command.State,
+                command.FailureCode,
+                command.ObservedContainerRevision,
+                command.DeadlineUtc,
+                command.CreatedAtUtc,
+                command.UpdatedAtUtc,
+                command.CompletedAtUtc))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
 
     public async Task<AgentCommandEnqueueResult> EnqueueAsync(
         PersistedAgentCommand command,
@@ -71,6 +113,29 @@ public sealed class PostgresAgentCommandStore(ControlPlaneDbContext dbContext) :
             : AgentCommandEnqueueResult.ConflictingPayload;
     }
 
+    public async Task<AgentCommandEnqueueResult> EnqueueAuditedAsync(
+        PersistedAgentCommand command,
+        AuditEvent auditEvent,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auditEvent);
+        ValidateAuditEvent(
+            auditEvent,
+            command.Command.EnvironmentId,
+            command.Command.CommandId,
+            GetCommandAction(command.Command.Kind));
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var result = await EnqueueAsync(command, cancellationToken).ConfigureAwait(false);
+        if (result == AgentCommandEnqueueResult.Created)
+        {
+            await auditEventWriter.AppendAsync(auditEvent, cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
     public async Task<AgentCommandStatusUpdateResult> ApplyStatusAsync(
         AgentCommandStatusUpdate update,
         CancellationToken cancellationToken)
@@ -80,20 +145,29 @@ public sealed class PostgresAgentCommandStore(ControlPlaneDbContext dbContext) :
         var terminal = update.State is ControlPlaneCommandState.Succeeded or
             ControlPlaneCommandState.Failed or
             ControlPlaneCommandState.Indeterminate;
+        var reconcilesExpiredCommand = update.State is ControlPlaneCommandState.Succeeded or
+            ControlPlaneCommandState.Failed;
         var completedAtUtc = terminal ? update.UpdatedAtUtc : (DateTimeOffset?)null;
         var updated = await dbContext.AgentCommands
             .Where(command =>
                 command.EnvironmentId == update.EnvironmentId &&
                 command.CommandId == update.CommandId &&
-                command.State <= ControlPlaneCommandState.Accepted &&
-                command.State < update.State)
+                ((command.State <= ControlPlaneCommandState.Accepted &&
+                    command.State < update.State) ||
+                 (reconcilesExpiredCommand &&
+                    command.State == ControlPlaneCommandState.Indeterminate &&
+                    command.FailureCode == "expired_command")))
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(command => command.State, update.State)
                     .SetProperty(command => command.FailureCode, update.FailureCode)
                     .SetProperty(command => command.ObservedContainerRevision, update.ObservedContainerRevision)
                     .SetProperty(command => command.CompletedAtUtc, completedAtUtc)
-                    .SetProperty(command => command.UpdatedAtUtc, update.UpdatedAtUtc),
+                    .SetProperty(
+                        command => command.UpdatedAtUtc,
+                        command => command.UpdatedAtUtc > update.UpdatedAtUtc
+                            ? command.UpdatedAtUtc
+                            : update.UpdatedAtUtc),
                 cancellationToken)
             .ConfigureAwait(false);
         if (updated == 1)
@@ -123,6 +197,29 @@ public sealed class PostgresAgentCommandStore(ControlPlaneDbContext dbContext) :
         return sameStatus && (!terminal || existing.CompletedAtUtc == completedAtUtc)
                 ? AgentCommandStatusUpdateResult.Duplicate
                 : AgentCommandStatusUpdateResult.InvalidTransition;
+    }
+
+    public async Task<AgentCommandStatusUpdateResult> ApplyStatusAuditedAsync(
+        AgentCommandStatusUpdate update,
+        AuditEvent auditEvent,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(auditEvent);
+        ValidateAuditEvent(
+            auditEvent,
+            update.EnvironmentId,
+            update.CommandId,
+            "container.command.result");
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var result = await ApplyStatusAsync(update, cancellationToken).ConfigureAwait(false);
+        if (result == AgentCommandStatusUpdateResult.Applied)
+        {
+            await auditEventWriter.AppendAsync(auditEvent, cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return result;
     }
 
     public async Task<IReadOnlyList<PersistedAgentCommand>> ClaimDispatchableAsync(
@@ -234,34 +331,108 @@ public sealed class PostgresAgentCommandStore(ControlPlaneDbContext dbContext) :
             throw new ArgumentException("Current time must be UTC.", nameof(nowUtc));
         }
 
-        var failed = await dbContext.AgentCommands
-            .Where(command =>
-                command.State == ControlPlaneCommandState.Pending &&
-                command.LastDispatchFencingToken == null &&
-                command.DeadlineUtc <= nowUtc)
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(command => command.State, ControlPlaneCommandState.Failed)
-                    .SetProperty(command => command.FailureCode, "expired_command")
-                    .SetProperty(command => command.CompletedAtUtc, nowUtc)
-                    .SetProperty(command => command.UpdatedAtUtc, nowUtc),
-                cancellationToken)
-            .ConfigureAwait(false);
-        var indeterminate = await dbContext.AgentCommands
-            .Where(command =>
-                command.State <= ControlPlaneCommandState.Accepted &&
-                (command.State != ControlPlaneCommandState.Pending ||
-                    command.LastDispatchFencingToken != null) &&
-                command.DeadlineUtc <= nowUtc)
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(command => command.State, ControlPlaneCommandState.Indeterminate)
-                    .SetProperty(command => command.FailureCode, "expired_command")
-                    .SetProperty(command => command.CompletedAtUtc, nowUtc)
-                    .SetProperty(command => command.UpdatedAtUtc, nowUtc),
-                cancellationToken)
-            .ConfigureAwait(false);
+        var totalExpired = 0;
+        while (true)
+        {
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var candidates = await dbContext.AgentCommands
+                .AsNoTracking()
+                .Where(command =>
+                    command.State <= ControlPlaneCommandState.Accepted &&
+                    command.DeadlineUtc <= nowUtc)
+                .OrderBy(command => command.DeadlineUtc)
+                .ThenBy(command => command.CommandId)
+                .Select(command => new ExpirationCandidate(
+                    command.EnvironmentId,
+                    command.CommandId,
+                    command.State,
+                    command.LastDispatchFencingToken))
+                .Take(MaximumExpirationBatchSize)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
 
-        return failed + indeterminate;
+            var expiredInBatch = 0;
+            foreach (var candidate in candidates)
+            {
+                var state = candidate.State == ControlPlaneCommandState.Pending &&
+                    candidate.LastDispatchFencingToken is null
+                        ? ControlPlaneCommandState.Failed
+                        : ControlPlaneCommandState.Indeterminate;
+                var updated = await dbContext.AgentCommands
+                    .Where(command =>
+                        command.EnvironmentId == candidate.EnvironmentId &&
+                        command.CommandId == candidate.CommandId &&
+                        command.State == candidate.State &&
+                        command.LastDispatchFencingToken == candidate.LastDispatchFencingToken &&
+                        command.DeadlineUtc <= nowUtc)
+                    .ExecuteUpdateAsync(
+                        setters => setters
+                            .SetProperty(command => command.State, state)
+                            .SetProperty(command => command.FailureCode, "expired_command")
+                            .SetProperty(command => command.CompletedAtUtc, nowUtc)
+                            .SetProperty(command => command.UpdatedAtUtc, nowUtc),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (updated == 0)
+                {
+                    continue;
+                }
+
+                var outcome = state == ControlPlaneCommandState.Failed
+                    ? AuditOutcome.Failed
+                    : AuditOutcome.Indeterminate;
+                var auditEvent = AuditEvent.Create(
+                    Guid.NewGuid(),
+                    nowUtc,
+                    Guid.NewGuid(),
+                    AuditActorKind.System,
+                    "control-plane",
+                    "container.command.result",
+                    candidate.EnvironmentId,
+                    outcome,
+                    "expired_command",
+                    candidate.CommandId);
+                await auditEventWriter.AppendAsync(auditEvent, cancellationToken).ConfigureAwait(false);
+                expiredInBatch++;
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            totalExpired += expiredInBatch;
+            if (candidates.Count < MaximumExpirationBatchSize || expiredInBatch == 0)
+            {
+                return totalExpired;
+            }
+        }
     }
+
+    private sealed record ExpirationCandidate(
+        Guid EnvironmentId,
+        Guid CommandId,
+        ControlPlaneCommandState State,
+        long? LastDispatchFencingToken);
+
+    private static void ValidateAuditEvent(
+        AuditEvent auditEvent,
+        Guid environmentId,
+        Guid commandId,
+        string action)
+    {
+        if (auditEvent.EnvironmentId != environmentId ||
+            auditEvent.CommandId != commandId ||
+            !string.Equals(auditEvent.Action, action, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Audit event does not match the command mutation.", nameof(auditEvent));
+        }
+    }
+
+    private static string GetCommandAction(AgentCommandKind kind) =>
+        kind switch
+        {
+            AgentCommandKind.StartContainer => "container.start",
+            AgentCommandKind.StopContainer => "container.stop",
+            AgentCommandKind.RestartContainer => "container.restart",
+            AgentCommandKind.DeleteContainer => "container.delete",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
 }

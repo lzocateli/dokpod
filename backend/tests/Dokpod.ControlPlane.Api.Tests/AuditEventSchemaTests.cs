@@ -23,6 +23,7 @@ public sealed class AuditEventSchemaTests
 
         var eventIdProperty = entity.FindProperty(nameof(AuditEventEntity.EventId));
         var environmentIdProperty = entity.FindProperty(nameof(AuditEventEntity.EnvironmentId));
+        var commandIdProperty = entity.FindProperty(nameof(AuditEventEntity.CommandId));
         var occurredAtUtcProperty = entity.FindProperty(nameof(AuditEventEntity.OccurredAtUtc));
         var actorKindProperty = entity.FindProperty(nameof(AuditEventEntity.ActorKind));
         var actorIdProperty = entity.FindProperty(nameof(AuditEventEntity.ActorId));
@@ -31,6 +32,7 @@ public sealed class AuditEventSchemaTests
 
         Assert.NotNull(eventIdProperty);
         Assert.NotNull(environmentIdProperty);
+        Assert.NotNull(commandIdProperty);
         Assert.NotNull(occurredAtUtcProperty);
         Assert.NotNull(actorKindProperty);
         Assert.NotNull(actorIdProperty);
@@ -39,6 +41,7 @@ public sealed class AuditEventSchemaTests
 
         Assert.Equal(ValueGenerated.Never, eventIdProperty!.ValueGenerated);
         Assert.False(environmentIdProperty!.IsNullable);
+        Assert.True(commandIdProperty!.IsNullable);
         Assert.False(occurredAtUtcProperty!.IsNullable);
         Assert.False(actorKindProperty!.IsNullable);
         Assert.Equal(128, actorIdProperty!.GetMaxLength());

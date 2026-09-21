@@ -133,6 +133,7 @@ public static class ApiHost
         builder.Services.AddScoped<EnvironmentRegistrationService>();
         builder.Services.AddScoped<AgentCommandQueueService>();
         builder.Services.AddScoped<ContainerCommandService>();
+        builder.Services.AddScoped<ContainerCommandQueryService>();
         builder.Services.AddScoped<AgentCommandStatusService>();
         builder.Services.AddHostedService<AgentCommandExpirationWorker>();
         builder.Services.AddScoped<InventoryProjectionService>();

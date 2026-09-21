@@ -32,6 +32,18 @@ frontend/tests/
 
 Features integram por rotas, contratos públicos e fachadas pequenas; não importam detalhes internos umas das outras.
 
+### Inventário e lifecycle de containers
+
+- a rota lazy `/environments/:environmentId/containers` consulta cadastro e inventário pelo BFF;
+- a rota inicial lista somente ambientes autorizados por `environment:read`, com paginação por cursor e sem expor total global;
+- o cadastro solicita identificador previamente provisionado, nome e host, usa antiforgery e informa que usuários e permissões continuam sob responsabilidade do Keycloak;
+- ambientes desabilitados permanecem visíveis no catálogo, mas não oferecem acesso ao inventário;
+- ações são exibidas conforme os scopes retornados pelo cadastro do ambiente;
+- toda mutação obtém `X-Dokpod-Antiforgery`, gera uma chave de idempotência UUID e envia a revisão observada do container;
+- a fachada acompanha o comando até `succeeded`, `failed` ou `indeterminate` e então atualiza o inventário;
+- troca de ambiente e destruição da página invalidam carregamentos e polling anteriores;
+- exclusão exige confirmação contextual e informa que volumes não são removidos implicitamente.
+
 ## Experiência operacional
 
 - densidade informacional adequada a tarefas repetidas;
@@ -69,5 +81,7 @@ O frontend não implementa tela de senha, cadastro, recuperação, MFA, grupos o
 - testes de acessibilidade dos fluxos críticos;
 - screenshots desktop/mobile para mudanças visuais;
 - build de produção, lint, typecheck e ausência de erros inesperados no console.
+
+Os testes unitários das features cobrem catálogo e cadastro de ambientes, sessão expirada, carregamento do inventário, negação `403`, submissão com antiforgery e idempotência e acompanhamento até estado terminal. A validação black-box autenticada permanece obrigatória na stack E2E.
 
 Os assets de produção são servidos por uma imagem Dokpod derivada de `lzocateli/nginx:1.28.0-bookworm`; Node.js e Angular CLI não fazem parte da imagem final. A matriz completa e a política de digest estão em [Distribuição e operação](distribuicao.md#imagens-base-e-toolchains).

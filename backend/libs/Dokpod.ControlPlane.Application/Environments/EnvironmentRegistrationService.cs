@@ -16,11 +16,73 @@ public sealed record EnvironmentStateResult(
     string? FailureCode,
     AuthorizationDecisionOutcome AuthorizationOutcome);
 
+public sealed record EnvironmentCatalogResult(
+    IReadOnlyList<EnvironmentRegistration> Registrations,
+    Guid? NextCursor,
+    bool Available,
+    string? FailureCode);
+
 public sealed class EnvironmentRegistrationService(
     EnvironmentAccessService accessService,
     IEnvironmentRegistrationStore registrationStore,
     IEnvironmentAuthorizationDecider authorizationDecider)
 {
+    private const int MaxAuthorizationDecisions = 500;
+
+    public async Task<EnvironmentCatalogResult> ListAsync(
+        Guid? afterEnvironmentId,
+        int limit,
+        AuthenticatedActor actor,
+        string accessToken,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        if (limit is < 1 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        var registrations = new List<EnvironmentRegistration>(limit);
+        var cursor = afterEnvironmentId;
+        var decisions = 0;
+
+        while (registrations.Count < limit && decisions < MaxAuthorizationDecisions)
+        {
+            var page = await registrationStore.ListAsync(
+                cursor,
+                Math.Min(limit - registrations.Count, MaxAuthorizationDecisions - decisions),
+                cancellationToken).ConfigureAwait(false);
+
+            foreach (var registration in page.Registrations)
+            {
+                decisions++;
+                var authorization = await AuthorizeReadAsync(
+                    registration.EnvironmentId,
+                    actor,
+                    accessToken,
+                    correlationId,
+                    cancellationToken).ConfigureAwait(false);
+                if (authorization.Outcome is AuthorizationDecisionOutcome.Indeterminate)
+                {
+                    return new EnvironmentCatalogResult([], null, false, authorization.FailureCode);
+                }
+
+                if (authorization.Allowed)
+                {
+                    registrations.Add(registration);
+                }
+            }
+
+            cursor = page.NextCursor;
+            if (cursor is null)
+            {
+                break;
+            }
+        }
+
+        return new EnvironmentCatalogResult(registrations, cursor, true, null);
+    }
+
     public async Task<EnvironmentRegistrationResult> RegisterAsync(
         EnvironmentRegistration registration,
         AuthenticatedActor actor,

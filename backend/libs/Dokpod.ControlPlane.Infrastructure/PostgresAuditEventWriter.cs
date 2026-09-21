@@ -52,6 +52,7 @@ public sealed class PostgresAuditEventWriter(
                 ActorId = auditEvent.ActorId,
                 Action = auditEvent.Action,
                 EnvironmentId = auditEvent.EnvironmentId,
+                CommandId = auditEvent.CommandId,
                 Outcome = (int)auditEvent.Outcome,
                 FailureCode = auditEvent.FailureCode,
             });
@@ -79,25 +80,18 @@ public sealed class PostgresAuditEventWriter(
         byte[] payloadHash,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await dbContext.Database
-            .BeginTransactionAsync(cancellationToken)
+        if (dbContext.Database.CurrentTransaction is not null)
+        {
+            await ExecuteAppendAsync(auditEvent, payloadHash, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
 
         try
         {
-            await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-                SELECT dokpod.dokpod_append_audit_event(
-                    {auditEvent.EventId},
-                    {auditEvent.OccurredAtUtc},
-                    {auditEvent.CorrelationId},
-                    {(short)auditEvent.ActorKind},
-                    {auditEvent.ActorId},
-                    {auditEvent.Action},
-                    {auditEvent.EnvironmentId},
-                    {(short)auditEvent.Outcome},
-                    {auditEvent.FailureCode},
-                    {payloadHash})
-                """, cancellationToken).ConfigureAwait(false);
+            await ExecuteAppendAsync(auditEvent, payloadHash, cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation)
@@ -109,6 +103,25 @@ public sealed class PostgresAuditEventWriter(
                 exception);
         }
     }
+
+    private Task ExecuteAppendAsync(
+        AuditEvent auditEvent,
+        byte[] payloadHash,
+        CancellationToken cancellationToken) =>
+        dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT dokpod.dokpod_append_audit_event(
+                {auditEvent.EventId},
+                {auditEvent.OccurredAtUtc},
+                {auditEvent.CorrelationId},
+                {(short)auditEvent.ActorKind},
+                {auditEvent.ActorId},
+                {auditEvent.Action},
+                {auditEvent.EnvironmentId},
+                {auditEvent.CommandId},
+                {(short)auditEvent.Outcome},
+                {auditEvent.FailureCode},
+                {payloadHash})
+            """, cancellationToken);
 
     private void EnsureSamePayload(byte[] existingHash, byte[] payloadHash, Guid eventId)
     {
@@ -124,8 +137,8 @@ public sealed class PostgresAuditEventWriter(
 
     private static byte[] ComputePayloadHash(AuditEvent auditEvent)
     {
-        var payload = string.Join(
-            "\u001f",
+        var fields = new List<object?>
+        {
             auditEvent.EventId,
             auditEvent.OccurredAtUtc.ToUniversalTime().ToString("O"),
             auditEvent.CorrelationId,
@@ -133,8 +146,15 @@ public sealed class PostgresAuditEventWriter(
             auditEvent.ActorId,
             auditEvent.Action,
             auditEvent.EnvironmentId,
-            (int)auditEvent.Outcome,
-            auditEvent.FailureCode ?? string.Empty);
+        };
+        if (auditEvent.CommandId is not null)
+        {
+            fields.Add(auditEvent.CommandId);
+        }
+
+        fields.Add((int)auditEvent.Outcome);
+        fields.Add(auditEvent.FailureCode ?? string.Empty);
+        var payload = string.Join("\u001f", fields);
 
         return SHA256.HashData(Encoding.UTF8.GetBytes(payload));
     }

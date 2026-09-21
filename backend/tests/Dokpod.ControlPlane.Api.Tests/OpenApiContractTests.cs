@@ -17,9 +17,14 @@ public sealed class OpenApiContractTests
         Assert.Contains("/api/v1/environments/{environmentId}/containers:", contract, StringComparison.Ordinal);
         Assert.Contains("operationId: listEnvironmentContainers", contract, StringComparison.Ordinal);
         Assert.Contains("operationId: submitContainerCommand", contract, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/environments/{environmentId}/commands/{commandId}:", contract, StringComparison.Ordinal);
+        Assert.Contains("operationId: getContainerCommand", contract, StringComparison.Ordinal);
+        Assert.Contains("ContainerCommandStatus:", contract, StringComparison.Ordinal);
         Assert.Contains("name: Idempotency-Key", contract, StringComparison.Ordinal);
         Assert.Contains("maximum: 100", contract, StringComparison.Ordinal);
         Assert.Contains("/api/v1/environments:", contract, StringComparison.Ordinal);
+        Assert.Contains("operationId: listEnvironments", contract, StringComparison.Ordinal);
+        Assert.Contains("EnvironmentPage:", contract, StringComparison.Ordinal);
         Assert.Contains("operationId: registerEnvironment", contract, StringComparison.Ordinal);
         Assert.Contains("application/problem+json:", contract, StringComparison.Ordinal);
         Assert.Contains("'201':", contract, StringComparison.Ordinal);
@@ -31,6 +36,8 @@ public sealed class OpenApiContractTests
         Assert.Contains("'503':", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("AuditEventEntity", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("EnvironmentRegistrationEntity", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("fencingToken:", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("payloadHash:", contract, StringComparison.Ordinal);
     }
 
     private static string FindContractPath()

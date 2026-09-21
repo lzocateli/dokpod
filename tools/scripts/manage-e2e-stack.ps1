@@ -4,10 +4,10 @@ Sobe, recria e encerra a stack E2E do Dokpod ou um serviço específico dela.
 
 .DESCRIPTION
 Orquestra o Docker Compose de deploy/e2e/docker-compose-dokpod.yaml usando um
-arquivo de variáveis de ambiente externo ao repositório. O arquivo é repassado
-ao Docker Compose por --env-file e nunca é lido, exibido ou copiado pelo script.
-O padrão aponta para o arquivo externo de UserSecrets do Dokpod, documentado em
-deploy/e2e/README.md.
+arquivo de variáveis de ambiente externo ao repositório. O arquivo do Dokpod é
+repassado ao Docker Compose por --env-file. As credenciais PostgreSQL são lidas
+do arquivo externo da plataforma de identidade somente para derivar, em memória,
+a connection string interna da API; nenhum valor sensível é exibido ou copiado.
 
 As ações cobrem subir a stack, recriar containers e encerrá-los, com escopo na
 stack inteira ou em uma lista de serviços.
@@ -28,6 +28,12 @@ omitido, a ação vale para a stack inteira.
 Caminho do arquivo de variáveis de ambiente repassado ao Compose. Padrão:
 $env:APPDATA\Microsoft\UserSecrets\Dokpod\.env no Windows e
 $HOME/.microsoft/usersecrets/Dokpod/.env nas demais plataformas.
+
+.PARAMETER IdentityEnvFile
+Caminho do arquivo externo da plataforma de identidade que contém
+POSTGRES_ADMIN_USERNAME e POSTGRES_ADMIN_PASSWORD. Padrão:
+$env:APPDATA\Microsoft\UserSecrets\Altivy.Identity\.env no Windows e
+$HOME/.microsoft/usersecrets/Altivy.Identity/.env nas demais plataformas.
 
 .PARAMETER ComposeFile
 Caminho do arquivo Compose. Padrão: deploy/e2e/docker-compose-dokpod.yaml.
@@ -91,6 +97,8 @@ param(
 
     [string] $EnvFile,
 
+    [string] $IdentityEnvFile,
+
     [string] $ComposeFile,
 
     [ValidatePattern('^[a-z0-9][a-z0-9_.-]*$')]
@@ -132,6 +140,27 @@ function Write-UsageError {
     exit 2
 }
 
+function Get-EnvironmentFileValue {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][string] $Name
+    )
+
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ($line -match "^\s*$([regex]::Escape($Name))\s*=\s*(?<value>.*)\s*$") {
+            return $Matches.value.Trim().Trim('"', "'")
+        }
+    }
+
+    return $null
+}
+
+function ConvertTo-NpgsqlValue {
+    param([Parameter(Mandatory)][string] $Value)
+
+    return "'$($Value.Replace("'", "''"))'"
+}
+
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 
 if (-not $ComposeFile) {
@@ -158,6 +187,30 @@ if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) {
 }
 
 $EnvFile = (Resolve-Path -LiteralPath $EnvFile).Path
+
+if (-not $IdentityEnvFile) {
+    $IdentityEnvFile = if ($env:APPDATA) {
+        Join-Path $env:APPDATA 'Microsoft' 'UserSecrets' 'Altivy.Identity' '.env'
+    }
+    else {
+        Join-Path $HOME '.microsoft' 'usersecrets' 'Altivy.Identity' '.env'
+    }
+}
+
+if (-not (Test-Path -LiteralPath $IdentityEnvFile -PathType Leaf)) {
+    Write-UsageError "Arquivo de variáveis da plataforma de identidade não encontrado em '$IdentityEnvFile'. Informe -IdentityEnvFile."
+}
+
+$IdentityEnvFile = (Resolve-Path -LiteralPath $IdentityEnvFile).Path
+$postgresUsername = Get-EnvironmentFileValue -Path $IdentityEnvFile -Name 'POSTGRES_ADMIN_USERNAME'
+$postgresPassword = Get-EnvironmentFileValue -Path $IdentityEnvFile -Name 'POSTGRES_ADMIN_PASSWORD'
+
+if ([string]::IsNullOrWhiteSpace($postgresUsername) -or [string]::IsNullOrWhiteSpace($postgresPassword)) {
+    Write-UsageError "POSTGRES_ADMIN_USERNAME e POSTGRES_ADMIN_PASSWORD são obrigatórios no arquivo externo da plataforma de identidade."
+}
+
+$previousControlPlaneConnection = [Environment]::GetEnvironmentVariable('DOKPOD_CONTROLPLANE_CONNECTION', 'Process')
+$env:DOKPOD_CONTROLPLANE_CONNECTION = "Host=postgres;Port=5432;Database=keycloak;Username=$(ConvertTo-NpgsqlValue $postgresUsername);Password=$(ConvertTo-NpgsqlValue $postgresPassword);Search Path=dokpod"
 
 $services = @($Service | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 $profiles = @($ComposeProfile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
@@ -207,43 +260,51 @@ function Invoke-DockerCompose {
     }
 }
 
-switch ($Action) {
-    'Config' {
-        Invoke-DockerCompose -Arguments ($baseArguments + @('config', '--quiet') + $services)
+try {
+    switch ($Action) {
+        'Config' {
+            Invoke-DockerCompose -Arguments ($baseArguments + @('config', '--quiet') + $services)
+        }
+        { $_ -in @('Up', 'Recreate') } {
+            $arguments = $baseArguments + @('up', '--detach')
+
+            if ($Action -eq 'Recreate') {
+                $arguments += '--force-recreate'
+            }
+
+            if ($Build) {
+                $arguments += '--build'
+            }
+
+            if ($NoDeps) {
+                $arguments += '--no-deps'
+            }
+
+            if (-not $NoWait) {
+                $arguments += '--wait'
+            }
+
+            Invoke-DockerCompose -Arguments ($arguments + $services)
+        }
+        'Down' {
+            if ($services.Count -gt 0) {
+                Invoke-DockerCompose -Arguments ($baseArguments + @('rm', '--stop', '--force') + $services)
+                break
+            }
+
+            $arguments = $baseArguments + @('down', '--remove-orphans')
+
+            if ($RemoveVolumes) {
+                $arguments += '--volumes'
+            }
+
+            Invoke-DockerCompose -Arguments $arguments
+        }
     }
-    { $_ -in @('Up', 'Recreate') } {
-        $arguments = $baseArguments + @('up', '--detach')
-
-        if ($Action -eq 'Recreate') {
-            $arguments += '--force-recreate'
-        }
-
-        if ($Build) {
-            $arguments += '--build'
-        }
-
-        if ($NoDeps) {
-            $arguments += '--no-deps'
-        }
-
-        if (-not $NoWait) {
-            $arguments += '--wait'
-        }
-
-        Invoke-DockerCompose -Arguments ($arguments + $services)
-    }
-    'Down' {
-        if ($services.Count -gt 0) {
-            Invoke-DockerCompose -Arguments ($baseArguments + @('rm', '--stop', '--force') + $services)
-            break
-        }
-
-        $arguments = $baseArguments + @('down', '--remove-orphans')
-
-        if ($RemoveVolumes) {
-            $arguments += '--volumes'
-        }
-
-        Invoke-DockerCompose -Arguments $arguments
-    }
+}
+finally {
+    [Environment]::SetEnvironmentVariable(
+        'DOKPOD_CONTROLPLANE_CONNECTION',
+        $previousControlPlaneConnection,
+        'Process')
 }

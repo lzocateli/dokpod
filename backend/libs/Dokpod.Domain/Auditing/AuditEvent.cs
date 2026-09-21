@@ -26,6 +26,20 @@ public sealed record AuditEvent
         "environment.approve",
         "environment.suspend",
         "environment.revoke",
+        "container.start",
+        "container.stop",
+        "container.restart",
+        "container.delete",
+        "container.command.result",
+    ];
+
+    private static readonly HashSet<string> CommandActions =
+    [
+        "container.start",
+        "container.stop",
+        "container.restart",
+        "container.delete",
+        "container.command.result",
     ];
 
     private AuditEvent(
@@ -37,7 +51,8 @@ public sealed record AuditEvent
         string action,
         Guid environmentId,
         AuditOutcome outcome,
-        string? failureCode)
+        string? failureCode,
+        Guid? commandId)
     {
         EventId = eventId;
         OccurredAtUtc = occurredAtUtc;
@@ -48,6 +63,7 @@ public sealed record AuditEvent
         EnvironmentId = environmentId;
         Outcome = outcome;
         FailureCode = failureCode;
+        CommandId = commandId;
     }
 
     public Guid EventId { get; }
@@ -59,6 +75,7 @@ public sealed record AuditEvent
     public Guid EnvironmentId { get; }
     public AuditOutcome Outcome { get; }
     public string? FailureCode { get; }
+    public Guid? CommandId { get; }
 
     public static AuditEvent Create(
         Guid eventId,
@@ -69,7 +86,8 @@ public sealed record AuditEvent
         string action,
         Guid environmentId,
         AuditOutcome outcome,
-        string? failureCode = null)
+        string? failureCode = null,
+        Guid? commandId = null)
     {
         if (eventId == Guid.Empty)
         {
@@ -112,6 +130,11 @@ public sealed record AuditEvent
             throw new ArgumentOutOfRangeException(nameof(outcome));
         }
 
+        if (commandId == Guid.Empty || (CommandActions.Contains(action) && commandId is null))
+        {
+            throw new ArgumentException("Command audit actions require a command ID.", nameof(commandId));
+        }
+
         var normalizedFailureCode = NormalizeIdentifier(failureCode, nameof(failureCode), MaxFailureCodeLength);
         if (outcome is AuditOutcome.Failed or AuditOutcome.Denied or AuditOutcome.Indeterminate &&
             normalizedFailureCode is null)
@@ -128,7 +151,8 @@ public sealed record AuditEvent
             action,
             environmentId,
             outcome,
-            normalizedFailureCode);
+            normalizedFailureCode,
+            commandId);
     }
 
     private static string? NormalizeIdentifier(string? value, string parameterName, int maxLength)

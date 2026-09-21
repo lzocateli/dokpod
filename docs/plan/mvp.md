@@ -88,6 +88,8 @@ Validação:
 
 Evidências:
 - caso de uso, persistência de ambientes e endpoint protegido implementados; integração real PostgreSQL/Keycloak e testes horizontais permanecem pendentes.
+- catálogo paginado `GET /api/v1/environments` implementado com autorização `environment:read` por recurso, omissão de ambientes negados, falha fechada em decisão indeterminada e ausência de total global;
+- tela inicial Angular lista os ambientes autorizados, diferencia habilitados e desabilitados e permite cadastrar um ambiente previamente provisionado no Keycloak com antiforgery e tratamento de conflito;
 
 ### P-04: Inventário reconciliável
 
@@ -160,9 +162,18 @@ Evidências:
 - o caso de uso autoriza o scope específico antes de consultar o ambiente, falha fechado quando a autorização está indisponível e não enfileira comandos para ambiente sem scope ou agente offline;
 - replay com a mesma intenção permanece idempotente após renovação do fencing da sessão, preservando o token original para auditoria e usando separadamente o fencing de redespacho;
 - contrato OpenAPI documenta submissão assíncrona, resposta `202` e erros `400`, `401`, `403`, `404`, `409` e `503` sem expor metadados internos do agente;
-- testes de domínio: 27 aprovados; testes de aplicação do agente: 23 aprovados; testes de infraestrutura do agente: 4 aprovados;
-- testes da aplicação do control plane: 22 aprovados; testes da API e integrações: 68 aprovados;
-- auditoria da intenção e do resultado, consulta REST do estado do comando e UI permanecem pendentes.
+- `GET /api/v1/environments/{environmentId}/commands/{commandId}` consulta o estado durável somente após autorização `environment:read` e retorna ação, alvo, revisões, estado, resultado e timestamps sem expor hash ou fencing;
+- consulta inexistente retorna `404` somente após autorização; decisões negadas, indisponíveis ou malformadas não acessam a persistência nem revelam a existência do comando;
+- intenção autorizada e resultado terminal são registrados na auditoria append-only com correlação por `commandId`; criação/transição e evento correspondente são atômicos no PostgreSQL;
+- replay de criação ou resultado terminal não duplica auditoria, e falha do writer desfaz a mutação do comando;
+- expiração gera evento terminal pelo ator técnico `control-plane`, com outcome `Failed` para comando nunca despachado e `Indeterminate` quando o efeito pode ter ocorrido;
+- resultado definitivo tardio reconcilia somente `Indeterminate` originado por `expired_command`, preservando os eventos de expiração e resultado na trilha append-only;
+- testes de domínio: 28 aprovados; testes de aplicação do agente: 23 aprovados; testes de infraestrutura do agente: 4 aprovados;
+- testes da aplicação do control plane: 29 aprovados; testes da API e integrações: 76 aprovados, incluindo 18 testes de schema e persistência com PostgreSQL real;
+- UI Angular de lifecycle implementada em rota lazy por ambiente, com inventário paginado, idade da projeção, estados loading/vazio/erro/forbidden/indisponível, ações filtradas por scope e confirmação contextual de exclusão;
+- cliente OpenAPI gerado opera same-origin pelo BFF, obtém antiforgery antes de mutações, envia chave idempotente e acompanha o comando por polling cancelável até estado terminal;
+- testes frontend: 10 aprovados, cobrindo catálogo, cadastro, sessão expirada, fachada de lifecycle, erro `403`, refresh após resultado terminal e headers/corpo efetivamente enviados pelo cliente gerado; build Angular de produção aprovado;
+- fluxo black-box autenticado e screenshots contra a stack E2E permanecem pendentes.
 - estratégia de particionamento/retenção da tabela de comandos e garantia de persistência do rename do journal contra queda de energia permanecem bloqueios operacionais antes de produção.
 
 ### P-06: Hardening e release candidata
@@ -249,3 +260,7 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-21 | P-05 | in-progress | in-progress | worker real do agente integrado ao stream e validado ponta a ponta até resultado terminal; expiração, API, auditoria e UI seguem pendentes | IA assistida |
 | 2026-09-21 | P-05 | in-progress | in-progress | expiração terminal periódica e durante claim implementada; PostgreSQL real comprovou estados seguros e idempotência; API, auditoria e UI seguem pendentes | IA assistida |
 | 2026-09-21 | P-05 | in-progress | in-progress | API REST autorizada de lifecycle implementada com idempotência entre reconexões, contrato OpenAPI e testes de falha fechada; auditoria, consulta de estado e UI seguem pendentes | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | consulta REST autorizada do estado durável implementada sem expor hash ou fencing; auditoria atômica e UI seguem pendentes | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | auditoria append-only correlacionada por comando e atômica com intenção, resultado e expiração validada no PostgreSQL real; UI segue pendente | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | UI Angular de inventário e lifecycle implementada com BFF, antiforgery, scopes, polling terminal e testes; E2E autenticado e catálogo de ambientes seguem pendentes | IA assistida |
+| 2026-09-21 | P-03 | in-progress | in-progress | catálogo autorizado e cadastro de ambientes adicionados à tela inicial; provisionamento Keycloak e E2E horizontal seguem pendentes | IA assistida |

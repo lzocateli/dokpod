@@ -14,6 +14,13 @@ public sealed class UnavailableAuditEventWriter : IAuditEventWriter
 
 public sealed class UnavailableEnvironmentRegistrationStore : IEnvironmentRegistrationStore
 {
+    public Task<EnvironmentRegistrationPage> ListAsync(
+        Guid? afterEnvironmentId,
+        int limit,
+        CancellationToken cancellationToken) =>
+        Task.FromException<EnvironmentRegistrationPage>(
+            new InvalidOperationException("Control Plane persistence is unavailable."));
+
     public Task<EnvironmentRegistration?> GetAsync(
         Guid environmentId,
         CancellationToken cancellationToken) =>

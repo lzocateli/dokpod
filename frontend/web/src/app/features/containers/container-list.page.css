@@ -1,0 +1,43 @@
+:host { display: block; }
+.inventory-page { max-width: 96rem; margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem) 5rem; }
+.back-link { display: inline-block; margin-bottom: 1rem; color: var(--dk-color-ink); font-family: var(--dk-font-mono); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+.back-link:focus-visible { outline: 3px solid var(--dk-color-signal); outline-offset: 3px; }
+.page-header { display: flex; align-items: end; justify-content: space-between; gap: 2rem; padding: 2.5rem 0 2rem; border-bottom: 1px solid var(--dk-color-ink); }
+.eyebrow, dt { font-family: var(--dk-font-mono); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.eyebrow { margin: 0 0 0.75rem; color: var(--dk-color-accent-strong); }
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 0.35rem; font-family: var(--dk-font-display); font-size: clamp(2.5rem, 6vw, 5rem); line-height: 1; }
+.host, .identity p { margin-bottom: 0; color: var(--dk-color-muted); }
+button { min-height: 2.5rem; border: 1px solid var(--dk-color-ink); border-radius: 0.2rem; padding: 0.55rem 0.85rem; background: transparent; color: inherit; cursor: pointer; font-weight: 700; }
+button:hover:not(:disabled) { background: var(--dk-color-ink); color: var(--dk-color-paper); }
+button:disabled { cursor: wait; opacity: 0.45; }
+.inventory-meta { display: flex; flex-wrap: wrap; gap: 0.75rem 2rem; padding: 0.8rem 0; border-bottom: 1px solid var(--dk-color-border); color: var(--dk-color-muted); font-family: var(--dk-font-mono); font-size: 0.72rem; }
+.inventory-meta.stale { color: #7a3214; }
+.message { min-height: 20rem; padding: 5rem 0; }
+.message h2 { font-family: var(--dk-font-display); font-size: 2rem; }
+.message.error { color: #7f1d32; }
+.container-list { border-bottom: 1px solid var(--dk-color-border); }
+.container-row { display: grid; grid-template-columns: minmax(15rem, 1.35fr) minmax(20rem, 1fr) auto; gap: 1.5rem; align-items: center; padding: 1.25rem 0; border-top: 1px solid var(--dk-color-border); }
+.identity { display: grid; grid-template-columns: 0.75rem minmax(0, 1fr); gap: 1rem; align-items: center; min-width: 0; }
+.identity h2 { margin-bottom: 0.35rem; font-size: 1rem; }
+.identity p { overflow: hidden; font-family: var(--dk-font-mono); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
+.state-mark { width: 0.65rem; height: 2.75rem; background: #7e8b87; }
+.state-mark[data-state="running"] { background: var(--dk-color-accent-strong); }
+.state-mark[data-state="exited"], .state-mark[data-state="dead"] { background: #a4233e; }
+dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0; }
+dt { color: var(--dk-color-muted); }
+dd { overflow: hidden; margin: 0.25rem 0 0; font-family: var(--dk-font-mono); font-size: 0.76rem; text-overflow: ellipsis; }
+.actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 0.4rem; }
+.danger { border-color: #a4233e; color: #a4233e; }
+.danger:hover:not(:disabled) { background: #a4233e; color: #fff; }
+.operation { grid-column: 1 / -1; padding: 0.65rem 0.8rem; border-left: 0.25rem solid #9b7415; background: #f2ead1; font-family: var(--dk-font-mono); font-size: 0.75rem; }
+.operation[data-state="succeeded"] { border-color: var(--dk-color-accent-strong); background: #e4efd9; }
+.operation[data-state="failed"], .operation[data-state="indeterminate"] { border-color: #a4233e; background: #f4dce1; }
+.operation span { margin-left: 1rem; }
+.operation button { float: right; min-height: auto; padding: 0.15rem 0.4rem; }
+.load-more { display: block; margin: 2rem auto 0; }
+.dialog-backdrop { position: fixed; inset: 0; display: grid; place-items: center; z-index: 10; padding: 1rem; background: rgba(11, 18, 16, 0.72); }
+.confirm-dialog { width: min(100%, 34rem); border: 1px solid var(--dk-color-ink); border-radius: 0.25rem; padding: 2rem; background: var(--dk-color-paper); box-shadow: 0.5rem 0.5rem 0 #0b1210; }
+.dialog-actions { display: flex; justify-content: end; gap: 0.75rem; margin-top: 2rem; }
+@media (max-width: 900px) { .container-row { grid-template-columns: 1fr; } .actions { justify-content: start; } }
+@media (max-width: 600px) { .page-header { align-items: start; flex-direction: column; } dl { grid-template-columns: 1fr 1fr; } .dialog-actions { align-items: stretch; flex-direction: column; } }

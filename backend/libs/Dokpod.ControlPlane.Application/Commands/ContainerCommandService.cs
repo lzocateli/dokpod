@@ -4,6 +4,7 @@ using Dokpod.ControlPlane.Application.Agents;
 using Dokpod.ControlPlane.Application.Authorization;
 using Dokpod.ControlPlane.Application.Environments;
 using Dokpod.Domain.Commands;
+using Dokpod.Domain.Auditing;
 using Dokpod.Domain.Environments;
 
 namespace Dokpod.ControlPlane.Application.Commands;
@@ -110,7 +111,17 @@ public sealed class ContainerCommandService(
             ComputePayloadHash(kind, containerId, expectedContainerRevision),
             deadlineUtc,
             (long)session.FencingToken);
-        var enqueueResult = await queueService.EnqueueAsync(command, cancellationToken)
+        var auditEvent = AuditEvent.Create(
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            correlationId,
+            AuditActorKind.User,
+            actor.Subject,
+            AuditActionFor(kind),
+            environmentId,
+            AuditOutcome.Succeeded,
+            commandId: commandId);
+        var enqueueResult = await queueService.EnqueueAsync(command, auditEvent, cancellationToken)
             .ConfigureAwait(false);
 
         return new ContainerCommandSubmissionResult(
@@ -168,6 +179,15 @@ public sealed class ContainerCommandService(
         AgentCommandKind.StopContainer => EnvironmentResourceScopes.StopContainer,
         AgentCommandKind.RestartContainer => EnvironmentResourceScopes.RestartContainer,
         AgentCommandKind.DeleteContainer => EnvironmentResourceScopes.DeleteContainer,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    private static string AuditActionFor(AgentCommandKind kind) => kind switch
+    {
+        AgentCommandKind.StartContainer => "container.start",
+        AgentCommandKind.StopContainer => "container.stop",
+        AgentCommandKind.RestartContainer => "container.restart",
+        AgentCommandKind.DeleteContainer => "container.delete",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

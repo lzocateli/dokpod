@@ -13,11 +13,109 @@ public sealed record SubmitContainerCommandRequest(
 
 public static class ContainerCommandEndpoints
 {
-    public static void Map(IEndpointRouteBuilder endpoints) =>
+    public static void Map(IEndpointRouteBuilder endpoints)
+    {
         endpoints.MapPost(
                 "/api/v1/environments/{environmentId:guid}/containers/{containerId}/commands",
                 SubmitAsync)
             .RequireAuthorization();
+
+        endpoints.MapGet(
+                "/api/v1/environments/{environmentId:guid}/commands/{commandId:guid}",
+                GetAsync)
+            .RequireAuthorization();
+    }
+
+    private static async Task<IResult> GetAsync(
+        Guid environmentId,
+        Guid commandId,
+        HttpContext context,
+        ContainerCommandQueryService queryService,
+        CancellationToken cancellationToken)
+    {
+        var subject = context.User.FindFirstValue("sub");
+        var accessToken = ExtractBearerToken(context.Request.Headers.Authorization);
+        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(accessToken))
+        {
+            return Problem(
+                context,
+                StatusCodes.Status401Unauthorized,
+                "authentication_required",
+                "A autenticação do usuário é obrigatória.");
+        }
+
+        ContainerCommandQueryResult result;
+        try
+        {
+            result = await queryService.GetAsync(
+                environmentId,
+                commandId,
+                AuthenticatedActor.FromSubject(subject),
+                accessToken,
+                GetCorrelationId(context),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ArgumentException)
+        {
+            return Problem(
+                context,
+                StatusCodes.Status400BadRequest,
+                "invalid_command_query",
+                "A consulta do comando é inválida.");
+        }
+        catch (InvalidOperationException)
+        {
+            return Problem(
+                context,
+                StatusCodes.Status503ServiceUnavailable,
+                "persistence_unavailable",
+                "O estado do comando está indisponível.");
+        }
+
+        if (result.Outcome == ContainerCommandQueryOutcome.AuthorizationDenied)
+        {
+            return Problem(
+                context,
+                StatusCodes.Status403Forbidden,
+                result.FailureCode ?? "authorization_denied",
+                "A consulta do comando não foi autorizada.");
+        }
+
+        if (result.Outcome == ContainerCommandQueryOutcome.AuthorizationUnavailable)
+        {
+            return Problem(
+                context,
+                StatusCodes.Status503ServiceUnavailable,
+                result.FailureCode ?? "authorization_unavailable",
+                "A autorização da consulta está indisponível.");
+        }
+
+        if (result.Outcome == ContainerCommandQueryOutcome.NotFound || result.Command is null)
+        {
+            return Problem(
+                context,
+                StatusCodes.Status404NotFound,
+                result.FailureCode ?? "command_not_found",
+                "O comando não foi encontrado.");
+        }
+
+        var command = result.Command;
+        return Results.Ok(new
+        {
+            command.EnvironmentId,
+            command.CommandId,
+            action = MapKind(command.Kind),
+            command.ContainerId,
+            command.ExpectedContainerRevision,
+            state = MapState(command.State),
+            command.FailureCode,
+            command.ObservedContainerRevision,
+            command.DeadlineUtc,
+            command.CreatedAtUtc,
+            command.UpdatedAtUtc,
+            command.CompletedAtUtc,
+        });
+    }
 
     private static async Task<IResult> SubmitAsync(
         Guid environmentId,
@@ -130,6 +228,26 @@ public static class ContainerCommandEndpoints
         };
         return action is "start" or "stop" or "restart" or "delete";
     }
+
+    private static string MapKind(AgentCommandKind kind) => kind switch
+    {
+        AgentCommandKind.StartContainer => "start",
+        AgentCommandKind.StopContainer => "stop",
+        AgentCommandKind.RestartContainer => "restart",
+        AgentCommandKind.DeleteContainer => "delete",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    private static string MapState(ControlPlaneCommandState state) => state switch
+    {
+        ControlPlaneCommandState.Pending => "pending",
+        ControlPlaneCommandState.Dispatched => "dispatched",
+        ControlPlaneCommandState.Accepted => "accepted",
+        ControlPlaneCommandState.Succeeded => "succeeded",
+        ControlPlaneCommandState.Failed => "failed",
+        ControlPlaneCommandState.Indeterminate => "indeterminate",
+        _ => throw new ArgumentOutOfRangeException(nameof(state)),
+    };
 
     private static IResult Problem(HttpContext context, int status, string code, string detail) =>
         Results.Problem(

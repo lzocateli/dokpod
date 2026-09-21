@@ -21,6 +21,7 @@ volume próprio e API como upstream interno.
 - plataforma `altivy-identity` saudável;
 - rede externa `identity-global` criada;
 - `KEYCLOAK_BFF_CLIENT_SECRET` e demais valores no arquivo externo do Dokpod;
+- `POSTGRES_ADMIN_USERNAME` e `POSTGRES_ADMIN_PASSWORD` no arquivo externo da plataforma `Altivy.Identity`;
 - certificado PFX de laboratório para a API;
 - Docker Desktop com containers Linux.
 
@@ -31,9 +32,19 @@ sessão atual:
 
 - `DOKPOD_E2E_API_CERTIFICATE_PATH`, obrigatório, caminho absoluto para o PFX da API;
 - `DOKPOD_E2E_API_CERTIFICATE_PASSWORD`, opcional quando o PFX não tiver senha;
-- `DOKPOD_CONTROLPLANE_CONNECTION`, obrigatório, connection string PostgreSQL do plano de controle com `Search Path=dokpod`;
 - `DOKPOD_E2E_AGENT_CERTIFICATE_FINGERPRINT`, opcional para o laboratório de agentes;
 - `DOKPOD_E2E_AGENT_ENVIRONMENT_ID`, opcional, GUID do ambiente associado ao certificado do agente.
+
+O script recomendado também lê `POSTGRES_ADMIN_USERNAME` e
+`POSTGRES_ADMIN_PASSWORD` do arquivo externo
+`$env:APPDATA\Microsoft\UserSecrets\Altivy.Identity\.env`. Ele deriva somente
+em memória a conexão da API com `postgres:5432` e `Search Path=dokpod`, sem
+copiar ou exibir credenciais. O uso da role administrativa é uma compatibilidade
+transitória exclusiva do laboratório; ambientes promovidos devem usar database
+e role de runtime próprios, provisionados antes da migration.
+
+Ao invocar o Compose diretamente, sem o script, defina também
+`DOKPOD_CONTROLPLANE_CONNECTION` no processo por um mecanismo seguro.
 
 Nunca versione certificados privados, senhas ou `.env` dentro do repositório.
 
@@ -84,9 +95,11 @@ partir da raiz do repositório:
 ./tools/scripts/manage-e2e-stack.ps1 -Action Down
 ```
 
-O padrão de `-EnvFile` é `$env:APPDATA\Microsoft\UserSecrets\Dokpod\.env`. Use
-`-EnvFile` para apontar outro arquivo externo e `-ComposeProfile agent` para
-habilitar o agente. `-DryRun` exibe o comando resultante sem executá-lo.
+O padrão de `-EnvFile` é `$env:APPDATA\Microsoft\UserSecrets\Dokpod\.env`, e o
+de `-IdentityEnvFile` é
+`$env:APPDATA\Microsoft\UserSecrets\Altivy.Identity\.env`. Use os parâmetros
+para apontar outros arquivos externos e `-ComposeProfile agent` para habilitar
+o agente. `-DryRun` exibe o comando resultante sem executá-lo.
 
 O build do serviço `web` executa `npm ci`, geração do cliente OpenAPI e
 `ng build` dentro do Dockerfile `frontend/web/Dockerfile`, usando a imagem

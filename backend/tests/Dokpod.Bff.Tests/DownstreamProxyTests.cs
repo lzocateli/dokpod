@@ -25,6 +25,7 @@ public sealed class DownstreamProxyTests
         context.Request.QueryString = new QueryString("?page=2");
         context.Request.Headers["authorization"] = "Bearer browser-token";
         context.Request.Headers["cookie"] = "__Host-Dokpod.Session=opaque";
+        context.Request.Headers["Idempotency-Key"] = "50dc85ba-8d07-472e-a6c6-d2021c7b48dd";
         context.Request.Headers["X-Forwarded-For"] = "203.0.113.10";
         context.Request.ContentLength = 7;
         context.Request.Body = new MemoryStream("payload"u8.ToArray());
@@ -40,6 +41,10 @@ public sealed class DownstreamProxyTests
         Assert.False(handler.Request.Headers.Contains("Cookie"));
         Assert.False(handler.Request.Headers.Contains("Set-Cookie"));
         Assert.False(handler.Request.Headers.Contains("X-Forwarded-For"));
+        Assert.Equal(
+            "50dc85ba-8d07-472e-a6c6-d2021c7b48dd",
+            handler.Request.Headers.GetValues("Idempotency-Key").Single());
+        Assert.Equal("/api/v1/environments", handler.Request.RequestUri!.AbsolutePath);
         Assert.Equal("?page=2", handler.Request.RequestUri!.Query);
         Assert.Equal("correlation-1", context.Response.Headers["X-Correlation-Id"].ToString());
         Assert.False(context.Response.Headers.ContainsKey("Set-Cookie"));

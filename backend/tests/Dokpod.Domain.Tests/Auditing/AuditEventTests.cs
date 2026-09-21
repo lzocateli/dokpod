@@ -141,4 +141,34 @@ public sealed class AuditEventTests
         Assert.Equal("user-123", auditEvent.ActorId);
         Assert.Null(auditEvent.FailureCode);
     }
+
+    [Fact]
+    public void Create_CommandActionRequiresAndPreservesCommandId()
+    {
+        var commandId = Guid.NewGuid();
+        var auditEvent = AuditEvent.Create(
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            Guid.NewGuid(),
+            AuditActorKind.User,
+            "user-123",
+            "container.restart",
+            Guid.NewGuid(),
+            AuditOutcome.Succeeded,
+            commandId: commandId);
+
+        Assert.Equal(commandId, auditEvent.CommandId);
+
+        var exception = Assert.Throws<ArgumentException>(() => AuditEvent.Create(
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            Guid.NewGuid(),
+            AuditActorKind.User,
+            "user-123",
+            "container.restart",
+            Guid.NewGuid(),
+            AuditOutcome.Succeeded));
+
+        Assert.Equal("commandId", exception.ParamName);
+    }
 }

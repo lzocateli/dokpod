@@ -1,7 +1,9 @@
 using System.Security.Claims;
+using System.Text;
 using Dokpod.ControlPlane.Application.Authorization;
 using Dokpod.ControlPlane.Application.Environments;
 using Dokpod.Domain.Environments;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace Dokpod.ControlPlane.Api.Endpoints;
 
@@ -16,10 +18,79 @@ public static class EnvironmentEndpoints
 {
     public static void Map(IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapGet("/api/v1/environments", ListAsync)
+            .RequireAuthorization();
         endpoints.MapGet("/api/v1/environments/{environmentId:guid}", GetAsync)
             .RequireAuthorization();
         endpoints.MapPost("/api/v1/environments", RegisterAsync)
             .RequireAuthorization();
+    }
+
+    private static async Task<IResult> ListAsync(
+        string? cursor,
+        int? limit,
+        HttpContext context,
+        EnvironmentRegistrationService registrationService,
+        CancellationToken cancellationToken)
+    {
+        var subject = context.User.FindFirstValue("sub");
+        var accessToken = ExtractBearerToken(context.Request.Headers.Authorization);
+        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(accessToken))
+        {
+            return Problem(context,
+                StatusCodes.Status401Unauthorized,
+                "authentication_required",
+                "A autenticação do usuário é obrigatória.");
+        }
+
+        var pageLimit = limit ?? 20;
+        if (pageLimit is < 1 or > 100 || !TryDecodeCursor(cursor, out var afterEnvironmentId))
+        {
+            return Problem(context,
+                StatusCodes.Status400BadRequest,
+                "invalid_environment_query",
+                "Os parâmetros da consulta são inválidos.");
+        }
+
+        EnvironmentCatalogResult result;
+        try
+        {
+            result = await registrationService.ListAsync(
+                afterEnvironmentId,
+                pageLimit,
+                AuthenticatedActor.FromSubject(subject),
+                accessToken,
+                GetCorrelationId(context),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException)
+        {
+            return Problem(context,
+                StatusCodes.Status503ServiceUnavailable,
+                "persistence_unavailable",
+                "O catálogo de ambientes está indisponível.");
+        }
+
+        if (!result.Available)
+        {
+            return Problem(context,
+                StatusCodes.Status503ServiceUnavailable,
+                result.FailureCode ?? "authorization_unavailable",
+                "O catálogo de ambientes não pôde ser autorizado.");
+        }
+
+        return Results.Ok(new
+        {
+            environments = result.Registrations.Select(registration => new
+            {
+                environmentId = registration.EnvironmentId,
+                name = registration.Name,
+                host = registration.Host,
+                enabled = registration.Enabled,
+                scopes = registration.Scopes.Order(StringComparer.Ordinal),
+            }),
+            nextCursor = EncodeCursor(result.NextCursor),
+        });
     }
 
     private static async Task<IResult> GetAsync(
@@ -201,6 +272,37 @@ public static class EnvironmentEndpoints
         && authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
             ? authorization["Bearer ".Length..].Trim()
             : null;
+
+    private static bool TryDecodeCursor(string? cursor, out Guid? environmentId)
+    {
+        environmentId = null;
+        if (string.IsNullOrWhiteSpace(cursor))
+        {
+            return true;
+        }
+
+        try
+        {
+            var value = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(cursor));
+            if (!Guid.TryParseExact(value, "D", out var parsed))
+            {
+                return false;
+            }
+
+            environmentId = parsed;
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static string? EncodeCursor(Guid? environmentId) =>
+        environmentId is null
+            ? null
+            : WebEncoders.Base64UrlEncode(
+                Encoding.UTF8.GetBytes(environmentId.Value.ToString("D")));
 
     private static Guid GetCorrelationId(HttpContext context) =>
         Guid.TryParse(context.Request.Headers["X-Correlation-Id"], out var correlationId)

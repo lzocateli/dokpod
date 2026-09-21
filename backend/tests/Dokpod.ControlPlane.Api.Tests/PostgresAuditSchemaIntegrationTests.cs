@@ -1,5 +1,6 @@
 using Dokpod.ControlPlane.Application.Environments;
 using Dokpod.ControlPlane.Application.Commands;
+using Dokpod.ControlPlane.Application.Auditing;
 using Dokpod.ControlPlane.Infrastructure;
 using Dokpod.Domain.Auditing;
 using Dokpod.Domain.Commands;
@@ -45,6 +46,25 @@ public sealed class PostgresAuditSchemaIntegrationTests
             await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE dokpod.audit_events SET actor_id = {changedActor} WHERE event_id = {eventId}", TestContext.Current.CancellationToken));
 
         Assert.Contains("append-only", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AuditAppendFunction_PreservesPreviousAndCurrentSignatures()
+    {
+        await using var context = CreateContextOrSkip();
+
+        var argumentCounts = await context.Database
+            .SqlQueryRaw<int>("""
+                SELECT procedure.pronargs::int AS "Value"
+                FROM pg_proc procedure
+                JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+                WHERE namespace.nspname = 'dokpod'
+                  AND procedure.proname = 'dokpod_append_audit_event'
+                ORDER BY procedure.pronargs
+                """)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal([10, 11], argumentCounts);
     }
 
     [Fact]
@@ -114,6 +134,10 @@ public sealed class PostgresAuditSchemaIntegrationTests
 
         var created = await store.CreateAsync(registration, TestContext.Current.CancellationToken);
         var persisted = await store.GetAsync(registration.EnvironmentId, TestContext.Current.CancellationToken);
+        var firstPage = await store.ListAsync(null, 1, TestContext.Current.CancellationToken);
+        var secondPage = firstPage.NextCursor is null
+            ? new EnvironmentRegistrationPage([], null)
+            : await store.ListAsync(firstPage.NextCursor, 100, TestContext.Current.CancellationToken);
         var schemaRows = await context.Database
             .SqlQueryRaw<string>("""
                 SELECT namespace.nspname AS "Value"
@@ -131,6 +155,12 @@ public sealed class PostgresAuditSchemaIntegrationTests
         Assert.Equal(registration.Host, persisted.Host);
         Assert.Equal(registration.Enabled, persisted.Enabled);
         Assert.True(registration.Scopes.SetEquals(persisted.Scopes));
+        Assert.DoesNotContain(
+            secondPage.Registrations,
+            item => item.EnvironmentId == firstPage.Registrations[0].EnvironmentId);
+        Assert.Contains(
+            firstPage.Registrations.Concat(secondPage.Registrations),
+            item => item.EnvironmentId == registration.EnvironmentId);
         Assert.Equal("dokpod", Assert.Single(schemaRows));
     }
 
@@ -186,6 +216,8 @@ public sealed class PostgresAuditSchemaIntegrationTests
                 .EnqueueAsync(
                     command with { Command = command.Command with { FencingToken = 9 } },
                     TestContext.Current.CancellationToken);
+            var snapshot = await new PostgresAgentCommandStore(secondContext)
+                .GetAsync(environmentId, commandId, TestContext.Current.CancellationToken);
             var persisted = await setupContext.AgentCommands
                 .AsNoTracking()
                 .SingleAsync(
@@ -199,6 +231,10 @@ public sealed class PostgresAuditSchemaIntegrationTests
             Assert.Equal(AgentCommandEnqueueResult.Duplicate, replayWithRenewedFencing);
             Assert.Equal(new string('A', 64), persisted.PayloadHash);
             Assert.Equal(8, persisted.FencingToken);
+            Assert.NotNull(snapshot);
+            Assert.Equal(ControlPlaneCommandState.Pending, snapshot.State);
+            Assert.Equal(AgentCommandKind.RestartContainer, snapshot.Kind);
+            Assert.Null(snapshot.CompletedAtUtc);
         }
         finally
         {
@@ -309,6 +345,312 @@ public sealed class PostgresAuditSchemaIntegrationTests
             await context.EnvironmentRegistrations
                 .Where(item => item.EnvironmentId == environmentId)
                 .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_AuditedLifecyclePersistsIntentAndResultOnce()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+        await CreateEnvironmentAsync(context, environmentId, "command-audit");
+        var createdAt = new DateTimeOffset(2026, 9, 21, 19, 30, 0, TimeSpan.Zero);
+        var command = CreateCommand(environmentId, commandId, createdAt);
+        var intent = CreateCommandAuditEvent(
+            environmentId,
+            commandId,
+            createdAt,
+            "container.restart",
+            AuditOutcome.Succeeded);
+        var completedAt = createdAt.AddSeconds(1);
+        var update = new AgentCommandStatusUpdate(
+            environmentId,
+            commandId,
+            ControlPlaneCommandState.Succeeded,
+            null,
+            "revision-02",
+            completedAt);
+        var result = CreateCommandAuditEvent(
+            environmentId,
+            commandId,
+            completedAt,
+            "container.command.result",
+            AuditOutcome.Succeeded);
+        var store = new PostgresAgentCommandStore(context);
+
+        try
+        {
+            Assert.Equal(
+                AgentCommandEnqueueResult.Created,
+                await store.EnqueueAuditedAsync(command, intent, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandEnqueueResult.Duplicate,
+                await store.EnqueueAuditedAsync(command, intent, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.Applied,
+                await store.ApplyStatusAuditedAsync(update, result, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.Duplicate,
+                await store.ApplyStatusAuditedAsync(update, result, TestContext.Current.CancellationToken));
+
+            var persisted = await context.AgentCommands
+                .AsNoTracking()
+                .SingleAsync(
+                    item => item.EnvironmentId == environmentId && item.CommandId == commandId,
+                    TestContext.Current.CancellationToken);
+            var auditEvents = await context.AuditEvents
+                .AsNoTracking()
+                .Where(item => item.CommandId == commandId)
+                .OrderBy(item => item.OccurredAtUtc)
+                .ToListAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(ControlPlaneCommandState.Succeeded, persisted.State);
+            Assert.Equal("revision-02", persisted.ObservedContainerRevision);
+            Assert.Equal(2, auditEvents.Count);
+            Assert.Equal("container.restart", auditEvents[0].Action);
+            Assert.Equal("container.command.result", auditEvents[1].Action);
+        }
+        finally
+        {
+            await DeleteCommandEnvironmentAsync(context, environmentId);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_WhenIntentAuditFails_RollsBackCommand()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+        await CreateEnvironmentAsync(context, environmentId, "command-intent-rollback");
+        var createdAt = new DateTimeOffset(2026, 9, 21, 19, 40, 0, TimeSpan.Zero);
+        var command = CreateCommand(environmentId, commandId, createdAt);
+        var auditEvent = CreateCommandAuditEvent(
+            environmentId,
+            commandId,
+            createdAt,
+            "container.restart",
+            AuditOutcome.Succeeded);
+        var store = new PostgresAgentCommandStore(context, new ThrowingAuditEventWriter());
+
+        try
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                store.EnqueueAuditedAsync(command, auditEvent, TestContext.Current.CancellationToken));
+
+            Assert.False(await context.AgentCommands
+                .AsNoTracking()
+                .AnyAsync(
+                    item => item.EnvironmentId == environmentId && item.CommandId == commandId,
+                    TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            await DeleteCommandEnvironmentAsync(context, environmentId);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_WhenAuditDoesNotMatchMutation_RejectsBeforePersistence()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+        await CreateEnvironmentAsync(context, environmentId, "command-audit-mismatch");
+        var createdAt = new DateTimeOffset(2026, 9, 21, 19, 45, 0, TimeSpan.Zero);
+        var command = CreateCommand(environmentId, commandId, createdAt);
+        var mismatchedAuditEvent = CreateCommandAuditEvent(
+            environmentId,
+            Guid.NewGuid(),
+            createdAt,
+            "container.restart",
+            AuditOutcome.Succeeded);
+        var store = new PostgresAgentCommandStore(context);
+
+        try
+        {
+            var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+                store.EnqueueAuditedAsync(
+                    command,
+                    mismatchedAuditEvent,
+                    TestContext.Current.CancellationToken));
+
+            Assert.Equal("auditEvent", exception.ParamName);
+            Assert.False(await context.AgentCommands
+                .AsNoTracking()
+                .AnyAsync(
+                    item => item.EnvironmentId == environmentId && item.CommandId == commandId,
+                    TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            await DeleteCommandEnvironmentAsync(context, environmentId);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_WhenResultAuditFails_RollsBackTerminalStatus()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+        await CreateEnvironmentAsync(context, environmentId, "command-result-rollback");
+        var createdAt = new DateTimeOffset(2026, 9, 21, 19, 50, 0, TimeSpan.Zero);
+        var command = CreateCommand(environmentId, commandId, createdAt);
+        var setupStore = new PostgresAgentCommandStore(context);
+
+        try
+        {
+            Assert.Equal(
+                AgentCommandEnqueueResult.Created,
+                await setupStore.EnqueueAsync(command, TestContext.Current.CancellationToken));
+            var update = new AgentCommandStatusUpdate(
+                environmentId,
+                commandId,
+                ControlPlaneCommandState.Succeeded,
+                null,
+                "revision-02",
+                createdAt.AddSeconds(1));
+            var auditEvent = CreateCommandAuditEvent(
+                environmentId,
+                commandId,
+                update.UpdatedAtUtc,
+                "container.command.result",
+                AuditOutcome.Succeeded);
+            var store = new PostgresAgentCommandStore(context, new ThrowingAuditEventWriter());
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                store.ApplyStatusAuditedAsync(update, auditEvent, TestContext.Current.CancellationToken));
+
+            var persisted = await context.AgentCommands
+                .AsNoTracking()
+                .SingleAsync(
+                    item => item.EnvironmentId == environmentId && item.CommandId == commandId,
+                    TestContext.Current.CancellationToken);
+            Assert.Equal(ControlPlaneCommandState.Pending, persisted.State);
+            Assert.Null(persisted.CompletedAtUtc);
+            Assert.Null(persisted.ObservedContainerRevision);
+        }
+        finally
+        {
+            await DeleteCommandEnvironmentAsync(context, environmentId);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_WhenExpirationAuditFails_RollsBackExpiration()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+        await CreateEnvironmentAsync(context, environmentId, "command-expiration-rollback");
+        var createdAt = new DateTimeOffset(2026, 9, 21, 19, 55, 0, TimeSpan.Zero);
+        var command = CreateCommand(environmentId, commandId, createdAt);
+        var setupStore = new PostgresAgentCommandStore(context);
+
+        try
+        {
+            Assert.Equal(
+                AgentCommandEnqueueResult.Created,
+                await setupStore.EnqueueAsync(command, TestContext.Current.CancellationToken));
+            var store = new PostgresAgentCommandStore(context, new ThrowingAuditEventWriter());
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                store.ExpireNonTerminalAsync(command.Command.DeadlineUtc, TestContext.Current.CancellationToken));
+
+            var persisted = await context.AgentCommands
+                .AsNoTracking()
+                .SingleAsync(
+                    item => item.EnvironmentId == environmentId && item.CommandId == commandId,
+                    TestContext.Current.CancellationToken);
+            Assert.Equal(ControlPlaneCommandState.Pending, persisted.State);
+            Assert.Null(persisted.FailureCode);
+            Assert.Null(persisted.CompletedAtUtc);
+        }
+        finally
+        {
+            await DeleteCommandEnvironmentAsync(context, environmentId);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_WhenExpiredCommandReportsLateResult_ReconcilesTerminalState()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+        await CreateEnvironmentAsync(context, environmentId, "command-late-result");
+        var createdAt = new DateTimeOffset(2026, 9, 21, 19, 58, 0, TimeSpan.Zero);
+        var command = CreateCommand(environmentId, commandId, createdAt);
+        var store = new PostgresAgentCommandStore(context);
+
+        try
+        {
+            Assert.Equal(
+                AgentCommandEnqueueResult.Created,
+                await store.EnqueueAsync(command, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.Applied,
+                await store.ApplyStatusAsync(
+                    new AgentCommandStatusUpdate(
+                        environmentId,
+                        commandId,
+                        ControlPlaneCommandState.Accepted,
+                        null,
+                        null,
+                        createdAt.AddSeconds(1)),
+                    TestContext.Current.CancellationToken));
+            Assert.Equal(
+                1,
+                await store.ExpireNonTerminalAsync(
+                    command.Command.DeadlineUtc,
+                    TestContext.Current.CancellationToken));
+            var lateResult = new AgentCommandStatusUpdate(
+                environmentId,
+                commandId,
+                ControlPlaneCommandState.Succeeded,
+                null,
+                "revision-02",
+                command.Command.DeadlineUtc.AddSeconds(-1));
+            var resultAudit = CreateCommandAuditEvent(
+                environmentId,
+                commandId,
+                lateResult.UpdatedAtUtc,
+                "container.command.result",
+                AuditOutcome.Succeeded);
+
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.Applied,
+                await store.ApplyStatusAuditedAsync(
+                    lateResult,
+                    resultAudit,
+                    TestContext.Current.CancellationToken));
+
+            var persisted = await context.AgentCommands
+                .AsNoTracking()
+                .SingleAsync(
+                    item => item.EnvironmentId == environmentId && item.CommandId == commandId,
+                    TestContext.Current.CancellationToken);
+            var outcomes = await context.AuditEvents
+                .AsNoTracking()
+                .Where(auditEvent =>
+                    auditEvent.CommandId == commandId &&
+                    auditEvent.Action == "container.command.result")
+                .Select(auditEvent => auditEvent.Outcome)
+                .ToListAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(ControlPlaneCommandState.Succeeded, persisted.State);
+            Assert.Equal("revision-02", persisted.ObservedContainerRevision);
+            Assert.Equal(lateResult.UpdatedAtUtc, persisted.CompletedAtUtc);
+            Assert.Equal(command.Command.DeadlineUtc, persisted.UpdatedAtUtc);
+            Assert.Equal(2, outcomes.Count);
+            Assert.Contains((int)AuditOutcome.Indeterminate, outcomes);
+            Assert.Contains((int)AuditOutcome.Succeeded, outcomes);
+        }
+        finally
+        {
+            await DeleteCommandEnvironmentAsync(context, environmentId);
         }
     }
 
@@ -496,6 +838,15 @@ public sealed class PostgresAuditSchemaIntegrationTests
                 .AsNoTracking()
                 .Where(command => command.EnvironmentId == environmentId)
                 .ToDictionaryAsync(command => command.CommandId, TestContext.Current.CancellationToken);
+            var expirationEventRows = await context.AuditEvents
+                .AsNoTracking()
+                .Where(auditEvent =>
+                    auditEvent.EnvironmentId == environmentId &&
+                    auditEvent.CommandId != null &&
+                    auditEvent.Action == "container.command.result" &&
+                    auditEvent.FailureCode == "expired_command")
+                .ToListAsync(TestContext.Current.CancellationToken);
+            var expirationEvents = expirationEventRows.ToDictionary(auditEvent => auditEvent.CommandId!.Value);
 
             Assert.Equal(futureId, Assert.Single(dispatchable).Command.CommandId);
             Assert.Equal(0, repeatedExpiration);
@@ -510,6 +861,10 @@ public sealed class PostgresAuditSchemaIntegrationTests
             Assert.Equal(deadline, persisted[pendingId].CompletedAtUtc);
             Assert.Equal(deadline, persisted[dispatchedId].CompletedAtUtc);
             Assert.Equal(deadline, persisted[acceptedId].CompletedAtUtc);
+            Assert.Equal(3, expirationEvents.Count);
+            Assert.Equal((int)AuditOutcome.Failed, expirationEvents[pendingId].Outcome);
+            Assert.Equal((int)AuditOutcome.Indeterminate, expirationEvents[dispatchedId].Outcome);
+            Assert.Equal((int)AuditOutcome.Indeterminate, expirationEvents[acceptedId].Outcome);
         }
         finally
         {
@@ -681,6 +1036,68 @@ public sealed class PostgresAuditSchemaIntegrationTests
         return Assert.Single(rows);
     }
 
+    private static async Task CreateEnvironmentAsync(
+        ControlPlaneDbContext context,
+        Guid environmentId,
+        string namePrefix)
+    {
+        var registration = EnvironmentRegistration.Create(
+            environmentId,
+            namePrefix + "-" + Guid.NewGuid().ToString("N")[..12],
+            "lab-host",
+            enabled: true,
+            [EnvironmentResourceScopes.Read, EnvironmentResourceScopes.Manage]);
+        await new PostgresEnvironmentRegistrationStore(context)
+            .CreateAsync(registration, TestContext.Current.CancellationToken);
+    }
+
+    private static PersistedAgentCommand CreateCommand(
+        Guid environmentId,
+        Guid commandId,
+        DateTimeOffset createdAt) =>
+        new(
+            new AgentCommand(
+                environmentId,
+                commandId,
+                AgentCommandKind.RestartContainer,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "revision-01",
+                new string('A', 64),
+                createdAt.AddMinutes(1),
+                9),
+            ControlPlaneCommandState.Pending,
+            createdAt,
+            createdAt);
+
+    private static AuditEvent CreateCommandAuditEvent(
+        Guid environmentId,
+        Guid commandId,
+        DateTimeOffset occurredAt,
+        string action,
+        AuditOutcome outcome) =>
+        AuditEvent.Create(
+            Guid.NewGuid(),
+            occurredAt,
+            Guid.NewGuid(),
+            action == "container.command.result" ? AuditActorKind.Agent : AuditActorKind.User,
+            action == "container.command.result" ? $"agent:{environmentId:D}" : "integration-test",
+            action,
+            environmentId,
+            outcome,
+            commandId: commandId);
+
+    private static async Task DeleteCommandEnvironmentAsync(
+        ControlPlaneDbContext context,
+        Guid environmentId)
+    {
+        await context.AgentCommands
+            .Where(item => item.EnvironmentId == environmentId)
+            .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+        await context.EnvironmentRegistrations
+            .Where(item => item.EnvironmentId == environmentId)
+            .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+    }
+
     private static AuditEvent CreateAuditEvent()
     {
         return AuditEvent.Create(
@@ -692,5 +1109,11 @@ public sealed class PostgresAuditSchemaIntegrationTests
             "environment.register",
             Guid.NewGuid(),
             AuditOutcome.Succeeded);
+    }
+
+    private sealed class ThrowingAuditEventWriter : IAuditEventWriter
+    {
+        public Task AppendAsync(AuditEvent auditEvent, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Synthetic audit persistence failure.");
     }
 }

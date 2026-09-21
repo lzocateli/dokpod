@@ -1,4 +1,123 @@
-.shell {
+.app-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 4.5rem;
+	padding: 0.75rem clamp(1rem, 4vw, 3rem);
+	border-bottom: 1px solid var(--dk-color-ink);
+	background: var(--dk-color-paper);
+}
+
+.brand img {
+	display: block;
+	width: 9rem;
+	height: auto;
+}
+
+.session-user {
+	display: grid;
+	justify-items: end;
+	font-family: var(--dk-font-mono);
+	font-size: 0.72rem;
+}
+
+.session-user span {
+	color: var(--dk-color-accent-strong);
+	font-size: 0.62rem;
+}
+
+.login-shell {
+	display: grid;
+	grid-template-columns: minmax(16rem, 0.75fr) minmax(20rem, 1fr);
+	min-height: 100vh;
+}
+
+.brand-panel,
+.login-shell > section {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: clamp(2rem, 7vw, 6rem);
+}
+
+.brand-panel {
+	justify-content: space-between;
+	background: #173025;
+	color: #e6f5c8;
+}
+
+.brand-panel img {
+	width: min(100%, 27rem);
+}
+
+.brand-panel p,
+.eyebrow {
+	font-family: var(--dk-font-mono);
+	font-size: 0.72rem;
+	font-weight: 700;
+}
+
+.login-shell h1,
+.session-state h1 {
+	max-width: 11ch;
+	margin: 0 0 2rem;
+	font-family: var(--dk-font-display);
+	font-size: clamp(3rem, 7vw, 6rem);
+	line-height: 0.95;
+}
+
+.login-shell section p {
+	max-width: 34rem;
+	color: var(--dk-color-muted);
+	line-height: 1.6;
+}
+
+button {
+	width: fit-content;
+	border: 1px solid var(--dk-color-ink);
+	border-radius: 0.25rem;
+	padding: 0.75rem 1rem;
+	background: var(--dk-color-ink);
+	color: var(--dk-color-paper);
+	cursor: pointer;
+	font-weight: 700;
+}
+
+.session-state {
+	display: grid;
+	align-content: center;
+	min-height: 100vh;
+	padding: clamp(2rem, 8vw, 7rem);
+}
+
+.session-state.error {
+	color: #7f1d32;
+}
+
+@media (max-width: 700px) {
+	.login-shell {
+		grid-template-columns: 1fr;
+		grid-template-rows: 15rem 1fr;
+	}
+
+	.brand-panel {
+		padding: 1.5rem;
+	}
+
+	.brand-panel img {
+		width: 16rem;
+	}
+
+	.login-shell > section {
+		padding: 2.5rem 1.5rem;
+	}
+
+	.session-user strong {
+		max-width: 10rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+}.shell {
 	display: grid;
 	grid-template-columns: minmax(220px, 0.7fr) minmax(320px, 1fr);
 	grid-template-rows: auto 1fr;

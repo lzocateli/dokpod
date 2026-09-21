@@ -10,6 +10,58 @@ namespace Dokpod.ControlPlane.Api.Tests;
 public sealed class EnvironmentRegistrationServiceTests
 {
     [Fact]
+    public async Task ListAsync_OmitsDeniedEnvironments()
+    {
+        var allowed = CreateRegistration();
+        var denied = CreateRegistration();
+        var store = new RecordingEnvironmentRegistrationStore
+        {
+            PageToRead = new EnvironmentRegistrationPage([allowed, denied], null)
+        };
+        var service = CreateService(
+            new ResourceAuthorizationDecider(allowed.EnvironmentId),
+            store);
+
+        var result = await service.ListAsync(
+            null,
+            20,
+            AuthenticatedActor.FromSubject("user-1"),
+            "access-token",
+            Guid.NewGuid(),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Available);
+        Assert.Equal([allowed], result.Registrations);
+    }
+
+    [Fact]
+    public async Task ListAsync_WhenAuthorizationIsIndeterminate_ReturnsNoPartialPage()
+    {
+        var store = new RecordingEnvironmentRegistrationStore
+        {
+            PageToRead = new EnvironmentRegistrationPage([CreateRegistration()], null)
+        };
+        var service = CreateService(
+            new RecordingAuthorizationDecider(
+                new EnvironmentAuthorizationDecision(
+                    AuthorizationDecisionOutcome.Indeterminate,
+                    "authorization_timeout")),
+            store);
+
+        var result = await service.ListAsync(
+            null,
+            20,
+            AuthenticatedActor.FromSubject("user-1"),
+            "access-token",
+            Guid.NewGuid(),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.Available);
+        Assert.Empty(result.Registrations);
+        Assert.Equal("authorization_timeout", result.FailureCode);
+    }
+
+    [Fact]
     public async Task RegisterAsync_WhenAuthorizationIsDenied_DoesNotPersistEnvironment()
     {
         var store = new RecordingEnvironmentRegistrationStore();
@@ -157,11 +209,32 @@ public sealed class EnvironmentRegistrationServiceTests
             Task.FromResult(decision);
     }
 
+    private sealed class ResourceAuthorizationDecider(Guid allowedEnvironmentId)
+        : IEnvironmentAuthorizationDecider
+    {
+        public Task<EnvironmentAuthorizationDecision> DecideAsync(
+            string resource,
+            string scope,
+            AuthenticatedActor actor,
+            string accessToken,
+            Guid correlationId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(resource.EndsWith(allowedEnvironmentId.ToString("D"), StringComparison.Ordinal)
+                ? new EnvironmentAuthorizationDecision(AuthorizationDecisionOutcome.Allowed, null)
+                : new EnvironmentAuthorizationDecision(AuthorizationDecisionOutcome.Denied, "scope_denied"));
+    }
+
     private sealed class RecordingEnvironmentRegistrationStore : IEnvironmentRegistrationStore
     {
         public EnvironmentRegistration? Registration { get; private set; }
         public EnvironmentRegistration? RegistrationToRead { get; init; }
+        public EnvironmentRegistrationPage PageToRead { get; init; } = new([], null);
         public bool WasRead { get; private set; }
+
+        public Task<EnvironmentRegistrationPage> ListAsync(
+            Guid? afterEnvironmentId,
+            int limit,
+            CancellationToken cancellationToken) => Task.FromResult(PageToRead);
 
         public Task<EnvironmentRegistration?> GetAsync(
             Guid environmentId,

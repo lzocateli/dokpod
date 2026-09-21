@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Dokpod.ControlPlane.Application.Auditing;
 using Dokpod.ControlPlane.Infrastructure;
 using Dokpod.Domain.Auditing;
@@ -21,6 +23,7 @@ public sealed class AuditEventWriterTests
         Assert.Equal(auditEvent.EventId, persisted.EventId);
         Assert.Equal(auditEvent.CorrelationId, persisted.CorrelationId);
         Assert.Equal(auditEvent.EnvironmentId, persisted.EnvironmentId);
+        Assert.Equal(auditEvent.CommandId, persisted.CommandId);
         Assert.Equal((int)auditEvent.ActorKind, persisted.ActorKind);
         Assert.Equal(auditEvent.Action, persisted.Action);
         Assert.Equal((int)auditEvent.Outcome, persisted.Outcome);
@@ -65,6 +68,25 @@ public sealed class AuditEventWriterTests
     }
 
     [Fact]
+    public async Task AppendAsync_WithLegacyEventHash_IsIdempotent()
+    {
+        await using var context = CreateContext();
+        var auditEvent = CreateAuditEvent();
+        context.AuditEventKeys.Add(new AuditEventKeyEntity
+        {
+            EventId = auditEvent.EventId,
+            PayloadHash = ComputeLegacyPayloadHash(auditEvent),
+        });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var writer = new PostgresAuditEventWriter(context);
+
+        await writer.AppendAsync(auditEvent, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, await context.AuditEventKeys.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Empty(await context.AuditEvents.ToListAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task AppendAsync_WithCanceledToken_ThrowsOperationCanceledException()
     {
         await using var context = CreateContext();
@@ -96,5 +118,22 @@ public sealed class AuditEventWriterTests
             "environment.register",
             Guid.NewGuid(),
             AuditOutcome.Succeeded);
+    }
+
+    private static byte[] ComputeLegacyPayloadHash(AuditEvent auditEvent)
+    {
+        var payload = string.Join(
+            "\u001f",
+            auditEvent.EventId,
+            auditEvent.OccurredAtUtc.ToUniversalTime().ToString("O"),
+            auditEvent.CorrelationId,
+            (int)auditEvent.ActorKind,
+            auditEvent.ActorId,
+            auditEvent.Action,
+            auditEvent.EnvironmentId,
+            (int)auditEvent.Outcome,
+            auditEvent.FailureCode ?? string.Empty);
+
+        return SHA256.HashData(Encoding.UTF8.GetBytes(payload));
     }
 }

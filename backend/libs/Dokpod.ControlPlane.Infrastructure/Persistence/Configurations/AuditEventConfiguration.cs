@@ -25,6 +25,10 @@ internal sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEv
             .HasColumnType("uuid")
             .IsRequired();
 
+        entity.Property(x => x.CommandId)
+            .HasColumnName("command_id")
+            .HasColumnType("uuid");
+
         entity.Property(x => x.OccurredAtUtc)
             .HasColumnName("occurred_at_utc")
             .HasColumnType("timestamptz")
@@ -61,5 +65,8 @@ internal sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEv
 
         entity.HasIndex(x => new { x.EnvironmentId, x.OccurredAtUtc })
             .HasDatabaseName("ix_audit_events_environment_time");
+
+        entity.HasIndex(x => new { x.EnvironmentId, x.CommandId, x.OccurredAtUtc })
+            .HasDatabaseName("ix_audit_events_environment_command_time");
     }
 }

@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { RouterLink, RouterOutlet } from '@angular/router';
 
 interface BffSession {
   authenticated: boolean;
@@ -9,7 +9,7 @@ interface BffSession {
 }
 
 @Component({
-  imports: [RouterOutlet],
+  imports: [RouterLink, RouterOutlet],
   selector: 'app-root',
   styleUrl: './app.css',
   templateUrl: './app.html',

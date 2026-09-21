@@ -14,6 +14,7 @@ using Dokpod.ControlPlane.Api.Commands;
 using Dokpod.ControlPlane.Api.Realtime;
 using Dokpod.ControlPlane.Application.Agents;
 using Dokpod.ControlPlane.Application.Commands;
+using Dokpod.Domain.Auditing;
 using Dokpod.ControlPlane.Application.Inventory;
 using Dokpod.Domain.Commands;
 using Google.Protobuf.WellKnownTypes;
@@ -782,10 +783,22 @@ public sealed class TransportBoundaryTests
         public IReadOnlyList<PersistedAgentCommand> DispatchableCommands { get; init; } = [];
         public TaskCompletionSource TerminalResult { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public Task<AgentCommandStatusSnapshot?> GetAsync(
+            Guid environmentId,
+            Guid commandId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<AgentCommandEnqueueResult> EnqueueAsync(
             PersistedAgentCommand command,
             CancellationToken cancellationToken) =>
             Task.FromResult(AgentCommandEnqueueResult.Created);
+
+        public Task<AgentCommandEnqueueResult> EnqueueAuditedAsync(
+            PersistedAgentCommand command,
+            AuditEvent auditEvent,
+            CancellationToken cancellationToken) =>
+            EnqueueAsync(command, cancellationToken);
 
         public Task<AgentCommandStatusUpdateResult> ApplyStatusAsync(
             AgentCommandStatusUpdate update,
@@ -801,6 +814,12 @@ public sealed class TransportBoundaryTests
 
             return Task.FromResult(AgentCommandStatusUpdateResult.Applied);
         }
+
+        public Task<AgentCommandStatusUpdateResult> ApplyStatusAuditedAsync(
+            AgentCommandStatusUpdate update,
+            AuditEvent auditEvent,
+            CancellationToken cancellationToken) =>
+            ApplyStatusAsync(update, cancellationToken);
 
         public Task<int> ExpireNonTerminalAsync(
             DateTimeOffset nowUtc,

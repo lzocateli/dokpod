@@ -4,6 +4,11 @@ namespace Dokpod.ControlPlane.Application.Environments;
 
 public interface IEnvironmentRegistrationStore
 {
+    Task<EnvironmentRegistrationPage> ListAsync(
+        Guid? afterEnvironmentId,
+        int limit,
+        CancellationToken cancellationToken);
+
     Task<EnvironmentRegistrationStoreResult> CreateAsync(
         EnvironmentRegistration registration,
         CancellationToken cancellationToken);
@@ -12,6 +17,10 @@ public interface IEnvironmentRegistrationStore
         Guid environmentId,
         CancellationToken cancellationToken);
 }
+
+public sealed record EnvironmentRegistrationPage(
+    IReadOnlyList<EnvironmentRegistration> Registrations,
+    Guid? NextCursor);
 
 public enum EnvironmentRegistrationStoreResult
 {

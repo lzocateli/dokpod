@@ -2,6 +2,7 @@ using Dokpod.ControlPlane.Application.Agents;
 using Dokpod.ControlPlane.Application.Authorization;
 using Dokpod.ControlPlane.Application.Commands;
 using Dokpod.ControlPlane.Application.Environments;
+using Dokpod.Domain.Auditing;
 using Dokpod.Domain.Commands;
 using Dokpod.Domain.Environments;
 using Xunit;
@@ -39,6 +40,9 @@ public sealed class ContainerCommandServiceTests
         Assert.Equal(EnvironmentResourceScopes.RestartContainer, authorization.Scope);
         Assert.Equal(17, commandStore.Command?.Command.FencingToken);
         Assert.Equal(64, commandStore.Command?.Command.PayloadHash.Length);
+        Assert.Equal(CommandId, commandStore.AuditEvent?.CommandId);
+        Assert.Equal("container.restart", commandStore.AuditEvent?.Action);
+        Assert.Equal("user-1", commandStore.AuditEvent?.ActorId);
         Assert.NotNull(deliveryQueue.Command);
     }
 
@@ -258,6 +262,12 @@ public sealed class ContainerCommandServiceTests
     {
         public bool WasRead { get; private set; }
 
+        public Task<EnvironmentRegistrationPage> ListAsync(
+            Guid? afterEnvironmentId,
+            int limit,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<EnvironmentRegistrationStoreResult> CreateAsync(
             EnvironmentRegistration registration,
             CancellationToken cancellationToken) =>
@@ -325,6 +335,13 @@ public sealed class ContainerCommandServiceTests
     private sealed class RecordingCommandStore(AgentCommandEnqueueResult result) : IAgentCommandStore
     {
         public PersistedAgentCommand? Command { get; private set; }
+        public AuditEvent? AuditEvent { get; private set; }
+
+        public Task<AgentCommandStatusSnapshot?> GetAsync(
+            Guid environmentId,
+            Guid commandId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         public Task<AgentCommandEnqueueResult> EnqueueAsync(
             PersistedAgentCommand command,
@@ -334,8 +351,23 @@ public sealed class ContainerCommandServiceTests
             return Task.FromResult(result);
         }
 
+        public Task<AgentCommandEnqueueResult> EnqueueAuditedAsync(
+            PersistedAgentCommand command,
+            AuditEvent auditEvent,
+            CancellationToken cancellationToken)
+        {
+            AuditEvent = auditEvent;
+            return EnqueueAsync(command, cancellationToken);
+        }
+
         public Task<AgentCommandStatusUpdateResult> ApplyStatusAsync(
             AgentCommandStatusUpdate update,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<AgentCommandStatusUpdateResult> ApplyStatusAuditedAsync(
+            AgentCommandStatusUpdate update,
+            AuditEvent auditEvent,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
