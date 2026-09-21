@@ -2,13 +2,20 @@ using System.Net.Security;
 using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Dokpod.Agent.Application.Commands;
+using Dokpod.Agent.Application.Engines;
+using Dokpod.Agent.Application.Protocol;
 using Dokpod.Agent.Contracts.V1;
+using Dokpod.Agent.Infrastructure.Commands;
 using Dokpod.Agent.Infrastructure.Protocol;
 using Dokpod.ControlPlane.Api;
 using Dokpod.ControlPlane.Api.Agents;
+using Dokpod.ControlPlane.Api.Commands;
 using Dokpod.ControlPlane.Api.Realtime;
 using Dokpod.ControlPlane.Application.Agents;
+using Dokpod.ControlPlane.Application.Commands;
 using Dokpod.ControlPlane.Application.Inventory;
+using Dokpod.Domain.Commands;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -17,6 +24,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Dokpod.ControlPlane.Api.Tests.Agents;
@@ -46,11 +54,13 @@ public sealed class TransportBoundaryTests
 
         Assert.False(store.IsActive(first));
         Assert.True(store.IsActive(second));
+        Assert.Equal(second, await store.FindActiveAsync(environmentId, TestContext.Current.CancellationToken));
 
         await store.DeactivateAsync(first, TestContext.Current.CancellationToken);
         Assert.True(store.IsActive(second));
         await store.DeactivateAsync(second, TestContext.Current.CancellationToken);
         Assert.False(store.IsActive(second));
+        Assert.Null(await store.FindActiveAsync(environmentId, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -96,6 +106,231 @@ public sealed class TransportBoundaryTests
         Assert.Equal(ControlPlaneMessage.PayloadOneofCase.SessionEstablished, call.ResponseStream.Current.PayloadCase);
         Assert.NotEqual(string.Empty, call.ResponseStream.Current.SessionEstablished.SessionId);
         Assert.NotEqual(0UL, call.ResponseStream.Current.SessionEstablished.FencingToken);
+    }
+
+    [Fact]
+    public async Task KestrelSession_WhenCommandIsQueued_DeliversItWithoutWaitingForAgentMessage()
+    {
+        using var certificates = TestCertificates.Create();
+        var environmentId = Guid.NewGuid();
+        var fingerprint = Convert.ToHexString(SHA256.HashData(certificates.Agent.RawData));
+        var deliveryQueue = new InMemoryAgentCommandDeliveryQueue();
+        var commandStore = new RecordingAgentCommandStore();
+        await using var app = await StartApiAsync(
+            certificates,
+            environmentId,
+            fingerprint,
+            commandDeliveryQueue: deliveryQueue,
+            commandStore: commandStore);
+        using var handler = CreateHttpHandler(certificates);
+        using var channel = GrpcChannel.ForAddress(
+            GetGrpcEndpoint(app),
+            new GrpcChannelOptions { HttpHandler = handler });
+        var client = new AgentControl.AgentControlClient(channel);
+        using var call = client.Connect(cancellationToken: TestContext.Current.CancellationToken);
+        var session = await EstablishSessionAsync(call, Capability.ContainerRestart);
+        var command = new PersistedAgentCommand(
+            new Dokpod.Domain.Commands.AgentCommand(
+                environmentId,
+                Guid.NewGuid(),
+                AgentCommandKind.RestartContainer,
+                new string('A', 64),
+                "revision-01",
+                new string('B', 64),
+                DateTimeOffset.UtcNow.AddMinutes(1),
+                (long)session.FencingToken),
+            ControlPlaneCommandState.Pending,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        await deliveryQueue.EnqueueAsync(command, TestContext.Current.CancellationToken);
+
+        Assert.True(await call.ResponseStream.MoveNext(TestContext.Current.CancellationToken));
+        var delivered = call.ResponseStream.Current;
+        Assert.Equal(ControlPlaneMessage.PayloadOneofCase.Command, delivered.PayloadCase);
+        Assert.Equal(2UL, delivered.Metadata.Sequence);
+        Assert.Equal(session.SessionId, delivered.Metadata.SessionId);
+        Assert.Equal(session.FencingToken, delivered.Metadata.FencingToken);
+        Assert.Equal(command.Command.CommandId.ToString("D"), delivered.Command.CommandId);
+        Assert.Equal(CommandKind.RestartContainer, delivered.Command.Kind);
+        Assert.Equal(command.Command.ContainerId, delivered.Command.ContainerId);
+        Assert.Equal(command.Command.ExpectedContainerRevision, delivered.Command.ExpectedContainerRevision);
+        Assert.Equal(command.Command.PayloadHash, Convert.ToHexString(delivered.Command.PayloadHash.Span));
+
+        var accepted = CreateHeartbeat(session, 1);
+        accepted.Heartbeat = null;
+        accepted.CommandAccepted = new CommandAccepted
+        {
+            CommandId = command.Command.CommandId.ToString("D"),
+            Acceptance = CommandAcceptance.Accepted,
+        };
+        await call.RequestStream.WriteAsync(accepted, TestContext.Current.CancellationToken);
+
+        var completedAt = DateTimeOffset.UtcNow;
+        var result = CreateHeartbeat(session, 2);
+        result.Heartbeat = null;
+        result.CommandResult = new CommandResult
+        {
+            CommandId = command.Command.CommandId.ToString("D"),
+            State = CommandResultState.Succeeded,
+            ObservedContainerRevision = "revision-02",
+            CompletedAt = Timestamp.FromDateTimeOffset(completedAt),
+        };
+        await call.RequestStream.WriteAsync(result, TestContext.Current.CancellationToken);
+        await call.RequestStream.CompleteAsync();
+        Assert.False(await call.ResponseStream.MoveNext(TestContext.Current.CancellationToken));
+
+        Assert.Collection(
+            commandStore.Updates,
+            update => Assert.Equal(ControlPlaneCommandState.Dispatched, update.State),
+            update => Assert.Equal(ControlPlaneCommandState.Accepted, update.State),
+            update =>
+            {
+                Assert.Equal(ControlPlaneCommandState.Succeeded, update.State);
+                Assert.Equal("revision-02", update.ObservedContainerRevision);
+                Assert.Equal(completedAt, update.UpdatedAtUtc);
+            });
+        Assert.All(commandStore.Updates, update =>
+        {
+            Assert.Equal(environmentId, update.EnvironmentId);
+            Assert.Equal(command.Command.CommandId, update.CommandId);
+        });
+    }
+
+    [Fact]
+    public async Task KestrelSession_WhenAcceptedCommandExists_RedeliversWithActiveFencing()
+    {
+        using var certificates = TestCertificates.Create();
+        var environmentId = Guid.NewGuid();
+        var fingerprint = Convert.ToHexString(SHA256.HashData(certificates.Agent.RawData));
+        var command = new PersistedAgentCommand(
+            new Dokpod.Domain.Commands.AgentCommand(
+                environmentId,
+                Guid.NewGuid(),
+                AgentCommandKind.RestartContainer,
+                new string('A', 64),
+                "revision-01",
+                new string('B', 64),
+                DateTimeOffset.UtcNow.AddMinutes(1),
+                1),
+            ControlPlaneCommandState.Accepted,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+        var commandStore = new RecordingAgentCommandStore
+        {
+            DispatchableCommands = [command],
+        };
+        await using var app = await StartApiAsync(
+            certificates,
+            environmentId,
+            fingerprint,
+            commandStore: commandStore);
+        using var handler = CreateHttpHandler(certificates);
+        using var channel = GrpcChannel.ForAddress(
+            GetGrpcEndpoint(app),
+            new GrpcChannelOptions { HttpHandler = handler });
+        var client = new AgentControl.AgentControlClient(channel);
+        using var call = client.Connect(cancellationToken: TestContext.Current.CancellationToken);
+        var session = await EstablishSessionAsync(call, Capability.ContainerRestart);
+
+        Assert.True(await call.ResponseStream.MoveNext(TestContext.Current.CancellationToken));
+        var delivered = call.ResponseStream.Current;
+        Assert.Equal(ControlPlaneMessage.PayloadOneofCase.Command, delivered.PayloadCase);
+        Assert.Equal(command.Command.CommandId.ToString("D"), delivered.Command.CommandId);
+        Assert.Equal(session.FencingToken, delivered.Metadata.FencingToken);
+        Assert.Equal((long)session.FencingToken, Assert.Single(commandStore.ClaimFencingTokens));
+        Assert.Empty(commandStore.Updates);
+    }
+
+    [Fact]
+    public async Task AgentControlWorker_ProcessesRecoveredCommandAndReportsTerminalResult()
+    {
+        using var certificates = TestCertificates.Create();
+        var environmentId = Guid.NewGuid();
+        var fingerprint = Convert.ToHexString(SHA256.HashData(certificates.Agent.RawData));
+        var dataDirectory = Path.Combine(Path.GetTempPath(), $"dokpod-agent-control-{Guid.NewGuid():N}");
+        var command = new PersistedAgentCommand(
+            new Dokpod.Domain.Commands.AgentCommand(
+                environmentId,
+                Guid.NewGuid(),
+                AgentCommandKind.RestartContainer,
+                new string('A', 64),
+                "revision-01",
+                new string('B', 64),
+                DateTimeOffset.UtcNow.AddMinutes(1),
+                1),
+            ControlPlaneCommandState.Pending,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+        var commandStore = new RecordingAgentCommandStore
+        {
+            DispatchableCommands = [command],
+        };
+
+        try
+        {
+            await using var app = await StartApiAsync(
+                certificates,
+                environmentId,
+                fingerprint,
+                commandStore: commandStore);
+            using var handler = CreateHttpHandler(certificates);
+            using var channel = GrpcChannel.ForAddress(
+                GetGrpcEndpoint(app),
+                new GrpcChannelOptions { HttpHandler = handler });
+            var client = new AgentControl.AgentControlClient(channel);
+            var journal = new FileCommandJournal(dataDirectory);
+            var engine = new CommandRecordingEngine(command.Command.ContainerId);
+            var timeProvider = TimeProvider.System;
+            var processor = new AgentCommandProcessor(
+                new AgentCommandGate(journal, timeProvider),
+                journal,
+                engine,
+                timeProvider);
+            var options = new global::Dokpod.Agent.AgentOptions(
+                dataDirectory,
+                Path.Combine(dataDirectory, "docker.sock"),
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(30),
+                false,
+                null,
+                environmentId,
+                Path.Combine(dataDirectory, "identity", "agent.pfx"),
+                null);
+            var worker = new global::Dokpod.Agent.AgentControlWorker(
+                options,
+                engine,
+                new AgentCommandProtocolHandler(processor),
+                NullLogger<global::Dokpod.Agent.AgentControlWorker>.Instance);
+            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                TestContext.Current.CancellationToken);
+            cancellation.CancelAfter(TimeSpan.FromSeconds(15));
+            var session = worker.RunSessionAsync(
+                token => client.Connect(cancellationToken: token),
+                environmentId,
+                cancellation.Token);
+
+            await commandStore.TerminalResult.Task.WaitAsync(cancellation.Token);
+
+            Assert.Equal(1, engine.ExecutionCount);
+            Assert.Collection(
+                commandStore.Updates,
+                update => Assert.Equal(ControlPlaneCommandState.Dispatched, update.State),
+                update => Assert.Equal(ControlPlaneCommandState.Accepted, update.State),
+                update => Assert.Equal(ControlPlaneCommandState.Succeeded, update.State));
+
+            await app.Services.GetRequiredService<IAgentSessionStore>()
+                .InvalidateEnvironmentAsync(environmentId, cancellation.Token);
+            var exception = await Assert.ThrowsAsync<RpcException>(async () => await session);
+            Assert.Equal(StatusCode.Aborted, exception.StatusCode);
+        }
+        finally
+        {
+            if (Directory.Exists(dataDirectory))
+            {
+                Directory.Delete(dataDirectory, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -289,7 +524,6 @@ public sealed class TransportBoundaryTests
         var session = await EstablishSessionAsync(call);
         var message = CreateHeartbeat(session, 1);
         message.Heartbeat = null;
-        message.CommandResult = new CommandResult();
 
         await call.RequestStream.WriteAsync(message, TestContext.Current.CancellationToken);
 
@@ -403,18 +637,20 @@ public sealed class TransportBoundaryTests
         };
 
     private static async Task<SessionEstablished> EstablishSessionAsync(
-        AsyncDuplexStreamingCall<AgentMessage, ControlPlaneMessage> call)
+        AsyncDuplexStreamingCall<AgentMessage, ControlPlaneMessage> call,
+        params Capability[] capabilities)
     {
+        var hello = new AgentHello
+        {
+            Engine = EngineKind.Docker,
+            OperatingSystem = Agent.Contracts.V1.OperatingSystem.Linux,
+            Architecture = Architecture.Amd64,
+            SupportedProtocolVersions = { "1" },
+        };
+        hello.Capabilities.Add(capabilities.Length == 0 ? [Capability.Inventory] : capabilities);
         await call.RequestStream.WriteAsync(new AgentMessage
         {
-            Hello = new AgentHello
-            {
-                Engine = EngineKind.Docker,
-                OperatingSystem = Agent.Contracts.V1.OperatingSystem.Linux,
-                Architecture = Architecture.Amd64,
-                Capabilities = { Capability.Inventory },
-                SupportedProtocolVersions = { "1" },
-            },
+            Hello = hello,
         }, TestContext.Current.CancellationToken);
 
         Assert.True(await call.ResponseStream.MoveNext(TestContext.Current.CancellationToken));
@@ -439,7 +675,9 @@ public sealed class TransportBoundaryTests
         Guid environmentId,
         string fingerprint,
         IInventoryProjectionStore? inventoryStore = null,
-        IHubContext<ControlPlaneHub>? hubContext = null)
+        IHubContext<ControlPlaneHub>? hubContext = null,
+        IAgentCommandDeliveryQueue? commandDeliveryQueue = null,
+        IAgentCommandStore? commandStore = null)
     {
         var builder = ApiHost.CreateBuilder(
             [],
@@ -461,6 +699,16 @@ public sealed class TransportBoundaryTests
                     if (hubContext is not null)
                     {
                         services.AddSingleton(hubContext);
+                    }
+
+                    if (commandDeliveryQueue is not null)
+                    {
+                        services.AddSingleton(commandDeliveryQueue);
+                    }
+
+                    if (commandStore is not null)
+                    {
+                        services.AddSingleton(commandStore);
                     }
                 }));
         var app = builder.Build();
@@ -524,6 +772,84 @@ public sealed class TransportBoundaryTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult<InventoryProjectionPage?>(null);
+        }
+    }
+
+    private sealed class RecordingAgentCommandStore : IAgentCommandStore
+    {
+        public List<AgentCommandStatusUpdate> Updates { get; } = [];
+        public List<long> ClaimFencingTokens { get; } = [];
+        public IReadOnlyList<PersistedAgentCommand> DispatchableCommands { get; init; } = [];
+        public TaskCompletionSource TerminalResult { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<AgentCommandEnqueueResult> EnqueueAsync(
+            PersistedAgentCommand command,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(AgentCommandEnqueueResult.Created);
+
+        public Task<AgentCommandStatusUpdateResult> ApplyStatusAsync(
+            AgentCommandStatusUpdate update,
+            CancellationToken cancellationToken)
+        {
+            Updates.Add(update);
+            if (update.State is ControlPlaneCommandState.Succeeded or
+                ControlPlaneCommandState.Failed or
+                ControlPlaneCommandState.Indeterminate)
+            {
+                TerminalResult.TrySetResult();
+            }
+
+            return Task.FromResult(AgentCommandStatusUpdateResult.Applied);
+        }
+
+        public Task<int> ExpireNonTerminalAsync(
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task<IReadOnlyList<PersistedAgentCommand>> ClaimDispatchableAsync(
+            Guid environmentId,
+            long activeFencingToken,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken)
+        {
+            ClaimFencingTokens.Add(activeFencingToken);
+            return Task.FromResult<IReadOnlyList<PersistedAgentCommand>>(
+                DispatchableCommands
+                    .Where(command => command.Command.EnvironmentId == environmentId)
+                    .Select(command => command with
+                    {
+                        Command = command.Command with { FencingToken = activeFencingToken },
+                    })
+                    .ToArray());
+        }
+    }
+
+    private sealed class CommandRecordingEngine(string containerId) : IContainerEngine
+    {
+        public int ExecutionCount { get; private set; }
+
+        public Task<EngineDescriptor> InspectAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new EngineDescriptor("test", "1.47"));
+
+        public Task<IReadOnlyList<EngineContainer>> ListContainersAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<EngineContainer>>([]);
+
+        public Task<EngineContainer?> InspectContainerAsync(
+            string requestedContainerId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<EngineContainer?>(
+                requestedContainerId == containerId
+                    ? new EngineContainer(containerId, "fixture", "fixture:latest", "running", "revision-01")
+                    : null);
+
+        public Task<ContainerMutationResult> ExecuteAsync(
+            AgentCommandKind commandKind,
+            string requestedContainerId,
+            CancellationToken cancellationToken)
+        {
+            ExecutionCount++;
+            return Task.FromResult(new ContainerMutationResult(true, null));
         }
     }
 

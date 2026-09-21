@@ -30,7 +30,7 @@ namespace Dokpod.ControlPlane.Api;
 public sealed record ApiHostOptions(
     int GrpcPort,
     int HealthPort,
-    X509Certificate2? ServerCertificate = null,
+    X509Certificate2 ServerCertificate,
     Func<X509Certificate2, X509Chain?, SslPolicyErrors, bool>? ClientCertificateValidation = null,
     bool LoopbackOnly = false,
     Action<IServiceCollection>? ConfigureServices = null);
@@ -43,6 +43,9 @@ public static class ApiHost
     {
         var builder = WebApplication.CreateBuilder(args);
         options ??= LoadOptionsFromEnvironment();
+        ArgumentNullException.ThrowIfNull(
+            options.ServerCertificate,
+            nameof(ApiHostOptions.ServerCertificate));
 
         builder.WebHost.ConfigureKestrel(serverOptions =>
         {
@@ -119,6 +122,7 @@ public static class ApiHost
             .AddCheck<KeycloakReadinessHealthCheck>("keycloak", tags: ["ready", "keycloak"]);
         builder.Services.AddSingleton<IAgentIdentityRegistry, UnavailableAgentIdentityRegistry>();
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
+        builder.Services.AddSingleton<IAgentCommandDeliveryQueue, InMemoryAgentCommandDeliveryQueue>();
         builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
         builder.Services.AddScoped<AgentSessionNegotiator>();
         builder.Services.AddScoped<IAuditEventWriter, UnavailableAuditEventWriter>();
@@ -128,6 +132,9 @@ public static class ApiHost
         builder.Services.AddScoped<EnvironmentAccessService>();
         builder.Services.AddScoped<EnvironmentRegistrationService>();
         builder.Services.AddScoped<AgentCommandQueueService>();
+        builder.Services.AddScoped<ContainerCommandService>();
+        builder.Services.AddScoped<AgentCommandStatusService>();
+        builder.Services.AddHostedService<AgentCommandExpirationWorker>();
         builder.Services.AddScoped<InventoryProjectionService>();
         builder.Services.AddScoped<InventoryQueryService>();
         var databaseConnectionString = builder.Configuration.GetConnectionString("ControlPlane");
@@ -176,6 +183,7 @@ public static class ApiHost
         })).RequireAuthorization();
         EnvironmentEndpoints.Map(app);
         InventoryEndpoints.Map(app);
+        ContainerCommandEndpoints.Map(app);
         app.MapHub<ControlPlaneHub>("/hubs/control-plane").RequireAuthorization();
     }
 

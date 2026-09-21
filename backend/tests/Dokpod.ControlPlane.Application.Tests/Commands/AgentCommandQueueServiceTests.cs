@@ -13,7 +13,8 @@ public sealed class AgentCommandQueueServiceTests
     public async Task EnqueueAsync_WhenCommandIsNew_CreatesPendingCommand()
     {
         var store = new RecordingAgentCommandStore(AgentCommandEnqueueResult.Created);
-        var service = new AgentCommandQueueService(store, new FixedTimeProvider(Now));
+        var deliveryQueue = new RecordingDeliveryQueue();
+        var service = new AgentCommandQueueService(store, deliveryQueue, new FixedTimeProvider(Now));
         var command = CreateCommand();
 
         var result = await service.EnqueueAsync(command, TestContext.Current.CancellationToken);
@@ -24,13 +25,30 @@ public sealed class AgentCommandQueueServiceTests
         Assert.Equal(ControlPlaneCommandState.Pending, store.Command.State);
         Assert.Equal(Now, store.Command.CreatedAtUtc);
         Assert.Equal(Now, store.Command.UpdatedAtUtc);
+        Assert.Equal(store.Command, deliveryQueue.Command);
+    }
+
+    [Theory]
+    [InlineData(AgentCommandEnqueueResult.Duplicate)]
+    [InlineData(AgentCommandEnqueueResult.ConflictingPayload)]
+    public async Task EnqueueAsync_WhenCommandIsNotCreated_DoesNotPublishDelivery(
+        AgentCommandEnqueueResult storeResult)
+    {
+        var store = new RecordingAgentCommandStore(storeResult);
+        var deliveryQueue = new RecordingDeliveryQueue();
+        var service = new AgentCommandQueueService(store, deliveryQueue, new FixedTimeProvider(Now));
+
+        var result = await service.EnqueueAsync(CreateCommand(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(storeResult, result);
+        Assert.Null(deliveryQueue.Command);
     }
 
     [Fact]
     public async Task EnqueueAsync_WhenDeadlineExpired_DoesNotPersistCommand()
     {
         var store = new RecordingAgentCommandStore(AgentCommandEnqueueResult.Created);
-        var service = new AgentCommandQueueService(store, new FixedTimeProvider(Now));
+        var service = new AgentCommandQueueService(store, new RecordingDeliveryQueue(), new FixedTimeProvider(Now));
         var command = CreateCommand() with { DeadlineUtc = Now };
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(
@@ -44,7 +62,7 @@ public sealed class AgentCommandQueueServiceTests
     public async Task EnqueueAsync_WhenPayloadHashIsNotCanonical_DoesNotPersistCommand()
     {
         var store = new RecordingAgentCommandStore(AgentCommandEnqueueResult.Created);
-        var service = new AgentCommandQueueService(store, new FixedTimeProvider(Now));
+        var service = new AgentCommandQueueService(store, new RecordingDeliveryQueue(), new FixedTimeProvider(Now));
         var command = CreateCommand() with { PayloadHash = "sha256:abc" };
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(
@@ -81,5 +99,40 @@ public sealed class AgentCommandQueueServiceTests
             Command = command;
             return Task.FromResult(result);
         }
+
+        public Task<AgentCommandStatusUpdateResult> ApplyStatusAsync(
+            AgentCommandStatusUpdate update,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<int> ExpireNonTerminalAsync(
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<PersistedAgentCommand>> ClaimDispatchableAsync(
+            Guid environmentId,
+            long activeFencingToken,
+            DateTimeOffset nowUtc,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class RecordingDeliveryQueue : IAgentCommandDeliveryQueue
+    {
+        public PersistedAgentCommand? Command { get; private set; }
+
+        public ValueTask EnqueueAsync(
+            PersistedAgentCommand command,
+            CancellationToken cancellationToken)
+        {
+            Command = command;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<PersistedAgentCommand> DequeueAsync(
+            Guid environmentId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }

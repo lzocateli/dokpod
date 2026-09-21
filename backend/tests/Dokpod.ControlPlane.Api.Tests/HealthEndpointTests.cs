@@ -11,14 +11,30 @@ namespace Dokpod.ControlPlane.Api.Tests;
 public sealed class HealthEndpointTests
 {
     [Fact]
+    public void CreateBuilder_WithoutServerCertificate_FailsClosed()
+    {
+        var exception = Assert.Throws<ArgumentNullException>(() => ApiHost.CreateBuilder(
+            [],
+            new ApiHostOptions(
+                GrpcPort: 7443,
+                HealthPort: 8080,
+                ServerCertificate: null!,
+                ClientCertificateValidation: null,
+                LoopbackOnly: true)));
+
+        Assert.Equal("ServerCertificate", exception.ParamName);
+    }
+
+    [Fact]
     public void MapEndpoints_RegistersHealthRoutes()
     {
+        using var serverCertificate = TestCertificateFactory.CreateServerCertificate();
         var builder = ApiHost.CreateBuilder(
             [],
             new ApiHostOptions(
                 GrpcPort: 7443,
                 HealthPort: 8080,
-                ServerCertificate: null,
+                ServerCertificate: serverCertificate,
                 ClientCertificateValidation: null,
                 LoopbackOnly: true));
         var app = builder.Build();
@@ -40,12 +56,13 @@ public sealed class HealthEndpointTests
     [Fact]
     public async Task CreateBuilder_WithoutDependenciesConfigured_FailsReadinessClosed()
     {
+        using var serverCertificate = TestCertificateFactory.CreateServerCertificate();
         var builder = ApiHost.CreateBuilder(
             ["--urls=http://127.0.0.1:0"],
             new ApiHostOptions(
                 GrpcPort: 7443,
                 HealthPort: 8080,
-                ServerCertificate: null,
+                ServerCertificate: serverCertificate,
                 ClientCertificateValidation: null,
                 LoopbackOnly: true));
 

@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../apps/Dokpod.Agent/Dokpod.Agent.csproj" />
     <ProjectReference Include="../../apps/Dokpod.ControlPlane.Api/Dokpod.ControlPlane.Api.csproj" />
     <ProjectReference Include="../../libs/Dokpod.Agent.Infrastructure/Dokpod.Agent.Infrastructure.csproj" />
   </ItemGroup>

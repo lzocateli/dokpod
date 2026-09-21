@@ -16,6 +16,8 @@ public sealed class OpenApiContractTests
         Assert.Contains("operationId: getEnvironment", contract, StringComparison.Ordinal);
         Assert.Contains("/api/v1/environments/{environmentId}/containers:", contract, StringComparison.Ordinal);
         Assert.Contains("operationId: listEnvironmentContainers", contract, StringComparison.Ordinal);
+        Assert.Contains("operationId: submitContainerCommand", contract, StringComparison.Ordinal);
+        Assert.Contains("name: Idempotency-Key", contract, StringComparison.Ordinal);
         Assert.Contains("maximum: 100", contract, StringComparison.Ordinal);
         Assert.Contains("/api/v1/environments:", contract, StringComparison.Ordinal);
         Assert.Contains("operationId: registerEnvironment", contract, StringComparison.Ordinal);

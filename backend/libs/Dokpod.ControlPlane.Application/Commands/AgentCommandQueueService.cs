@@ -4,9 +4,10 @@ namespace Dokpod.ControlPlane.Application.Commands;
 
 public sealed class AgentCommandQueueService(
     IAgentCommandStore commandStore,
+    IAgentCommandDeliveryQueue deliveryQueue,
     TimeProvider timeProvider)
 {
-    public Task<AgentCommandEnqueueResult> EnqueueAsync(
+    public async Task<AgentCommandEnqueueResult> EnqueueAsync(
         AgentCommand command,
         CancellationToken cancellationToken)
     {
@@ -57,6 +58,14 @@ public sealed class AgentCommandQueueService(
             now,
             now);
 
-        return commandStore.EnqueueAsync(persistedCommand, cancellationToken);
+        var result = await commandStore.EnqueueAsync(persistedCommand, cancellationToken)
+            .ConfigureAwait(false);
+        if (result == AgentCommandEnqueueResult.Created)
+        {
+            await deliveryQueue.EnqueueAsync(persistedCommand, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return result;
     }
 }

@@ -17,12 +17,13 @@ public sealed class ControlPlaneHttpSurfaceTests
     [Fact]
     public void MapEndpoints_RegistersProtectedSessionAndHubRoutes()
     {
+        using var serverCertificate = TestCertificateFactory.CreateServerCertificate();
         var builder = ApiHost.CreateBuilder(
             [],
             new ApiHostOptions(
                 GrpcPort: 7443,
                 HealthPort: 8080,
-                ServerCertificate: null,
+                ServerCertificate: serverCertificate,
                 ClientCertificateValidation: null,
                 LoopbackOnly: true));
         var app = builder.Build();
@@ -38,6 +39,9 @@ public sealed class ControlPlaneHttpSurfaceTests
         Assert.Contains("/api/v1/environments", endpoints.Keys);
         Assert.Contains("/api/v1/environments/{environmentId:guid}", endpoints.Keys);
         Assert.Contains("/api/v1/environments/{environmentId:guid}/containers", endpoints.Keys);
+        Assert.Contains(
+            "/api/v1/environments/{environmentId:guid}/containers/{containerId}/commands",
+            endpoints.Keys);
         Assert.Contains("/hubs/control-plane", endpoints.Keys);
         Assert.Contains("/health/live", endpoints.Keys);
         Assert.Contains("/health/ready", endpoints.Keys);
@@ -47,6 +51,7 @@ public sealed class ControlPlaneHttpSurfaceTests
         Assert.NotNull(endpoints["/api/v1/environments"].Metadata.GetMetadata<IAuthorizeData>());
         Assert.NotNull(endpoints["/api/v1/environments/{environmentId:guid}"].Metadata.GetMetadata<IAuthorizeData>());
         Assert.NotNull(endpoints["/api/v1/environments/{environmentId:guid}/containers"].Metadata.GetMetadata<IAuthorizeData>());
+        Assert.NotNull(endpoints["/api/v1/environments/{environmentId:guid}/containers/{containerId}/commands"].Metadata.GetMetadata<IAuthorizeData>());
         Assert.NotNull(endpoints["/hubs/control-plane"].Metadata.GetMetadata<IAuthorizeData>());
 
         var healthChecks = app.Services

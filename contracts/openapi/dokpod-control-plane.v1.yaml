@@ -6,6 +6,58 @@ info:
 servers:
   - url: https://localhost:7443
 paths:
+  /api/v1/environments/{environmentId}/containers/{containerId}/commands:
+    post:
+      operationId: submitContainerCommand
+      summary: Solicita uma ação de ciclo de vida em um container
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: environmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: containerId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{64}$'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identifica de forma estável a intenção lógica para retries seguros.
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitContainerCommandRequest'
+      responses:
+        '202':
+          description: Comando persistido ou replay idempotente aceito para processamento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContainerCommandAccepted'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /api/v1/environments/{environmentId}/containers:
     get:
       operationId: listEnvironmentContainers
@@ -134,6 +186,29 @@ components:
         format: uuid
       description: Identificador técnico opcional para correlação server-side.
   schemas:
+    SubmitContainerCommandRequest:
+      type: object
+      required: [action, expectedContainerRevision, deadlineUtc]
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum: [start, stop, restart, delete]
+        expectedContainerRevision:
+          type: string
+          minLength: 1
+          maxLength: 255
+        deadlineUtc:
+          type: string
+          format: date-time
+    ContainerCommandAccepted:
+      type: object
+      required: [commandId]
+      additionalProperties: false
+      properties:
+        commandId:
+          type: string
+          format: uuid
     RegisterEnvironmentRequest:
       type: object
       required: [environmentId, name, host]

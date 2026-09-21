@@ -13,7 +13,11 @@ public sealed class AgentCommandEntity
     public string PayloadHash { get; set; } = string.Empty;
     public DateTimeOffset DeadlineUtc { get; set; }
     public long FencingToken { get; set; }
+    public long? LastDispatchFencingToken { get; set; }
     public ControlPlaneCommandState State { get; set; }
+    public string? FailureCode { get; set; }
+    public string? ObservedContainerRevision { get; set; }
+    public DateTimeOffset? CompletedAtUtc { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
 }

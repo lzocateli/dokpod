@@ -17,7 +17,11 @@ public sealed class AgentCommandConfiguration : IEntityTypeConfiguration<AgentCo
         entity.Property(command => command.PayloadHash).HasColumnName("payload_hash").HasMaxLength(64).IsRequired();
         entity.Property(command => command.DeadlineUtc).HasColumnName("deadline_utc").IsRequired();
         entity.Property(command => command.FencingToken).HasColumnName("fencing_token").IsRequired();
+        entity.Property(command => command.LastDispatchFencingToken).HasColumnName("last_dispatch_fencing_token");
         entity.Property(command => command.State).HasColumnName("state").HasConversion<short>();
+        entity.Property(command => command.FailureCode).HasColumnName("failure_code").HasMaxLength(128);
+        entity.Property(command => command.ObservedContainerRevision).HasColumnName("observed_container_revision").HasMaxLength(255);
+        entity.Property(command => command.CompletedAtUtc).HasColumnName("completed_at_utc");
         entity.Property(command => command.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         entity.Property(command => command.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
         entity.HasOne<EnvironmentRegistrationEntity>()

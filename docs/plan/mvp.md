@@ -132,6 +132,7 @@ Evidências:
 Entregas:
 
 - comandos duráveis com deduplicação por ID/hash, fencing e reconciliação;
+- API REST autorizada para iniciar, parar, reiniciar e excluir containers;
 Validação:
 
 - testes reais de sucesso, timeout, replay após restart, ID com payload divergente, alvo recriado, desconexão e resposta perdida.
@@ -145,9 +146,23 @@ Evidências:
 - control plane possui modelo de comando pendente e fila PostgreSQL com chave por ambiente/ID, deadline, fencing, estado e timestamps;
 - envelope do comando valida ação permitida, alvo imutável, revisão, SHA-256 canônico, deadline UTC e fencing positivo;
 - enqueue concorrente no PostgreSQL comprova um único vencedor, replay idêntico e rejeição de hash ou envelope divergente sem sobrescrita;
-- testes de domínio: 27 aprovados; testes de aplicação do agente: 18 aprovados; testes de infraestrutura do agente: 4 aprovados;
-- testes da aplicação do control plane: 13 aprovados; testes da API e integrações: 61 aprovados;
-- transições posteriores ao estado pendente, despacho pelo stream, reconciliação, API autorizada, auditoria e UI permanecem pendentes.
+- stream bidirecional entrega comandos ao agente conectado mesmo quando ele não envia novas mensagens e persiste despacho, aceite e resultado;
+- transições PostgreSQL são monotônicas de `Pending` até estado terminal, com replay terminal idempotente e rejeição de regressão ou resultado divergente;
+- encerramento ou fencing da sessão cancela leituras e dequeues pendentes para impedir que um stream obsoleto consuma comandos futuros;
+- abertura de sessão reclama no PostgreSQL comandos não terminais e não expirados ainda não enviados naquele fencing, preserva o fencing original e registra separadamente o fencing de redespacho;
+- claim concorrente por compare-and-set entrega cada comando a apenas um reclamante, enquanto um fencing posterior permite nova tentativa para reconciliar resposta perdida;
+- worker do agente mantém stream mTLS, serializa metadata e sequência em um único writer, envia heartbeats durante mutações e reporta aceite antes do resultado terminal;
+- replay de comando aceito sem resultado retoma a mutação; replay com resultado persistido não repete o efeito no engine;
+- teste ponta a ponta com Kestrel executa o worker real do agente e comprova `Dispatched` → `Accepted` → `Succeeded` através do stream;
+- sweep periódico e claim de sessão terminalizam comandos vencidos com `expired_command`: `Pending` nunca despachado torna-se `Failed`, enquanto `Dispatched`, `Accepted` ou `Pending` já reclamado tornam-se `Indeterminate` porque o efeito pode ter ocorrido;
+- teste PostgreSQL real comprova a expiração, preservação de estados terminais e comandos futuros e idempotência do sweep;
+- `POST /api/v1/environments/{environmentId}/containers/{containerId}/commands` aceita somente `start`, `stop`, `restart` e `delete`, exige `Idempotency-Key` UUID e deriva no servidor o hash canônico e o fencing da sessão ativa;
+- o caso de uso autoriza o scope específico antes de consultar o ambiente, falha fechado quando a autorização está indisponível e não enfileira comandos para ambiente sem scope ou agente offline;
+- replay com a mesma intenção permanece idempotente após renovação do fencing da sessão, preservando o token original para auditoria e usando separadamente o fencing de redespacho;
+- contrato OpenAPI documenta submissão assíncrona, resposta `202` e erros `400`, `401`, `403`, `404`, `409` e `503` sem expor metadados internos do agente;
+- testes de domínio: 27 aprovados; testes de aplicação do agente: 23 aprovados; testes de infraestrutura do agente: 4 aprovados;
+- testes da aplicação do control plane: 22 aprovados; testes da API e integrações: 68 aprovados;
+- auditoria da intenção e do resultado, consulta REST do estado do comando e UI permanecem pendentes.
 - estratégia de particionamento/retenção da tabela de comandos e garantia de persistência do rename do journal contra queda de energia permanecem bloqueios operacionais antes de produção.
 
 ### P-06: Hardening e release candidata
@@ -229,3 +244,8 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-21 | P-05 | not-started | in-progress | replay durável de rejeições determinísticas validado após reabertura do journal, sem nova execução da engine | IA assistida |
 | 2026-09-21 | P-05 | in-progress | in-progress | fila PostgreSQL adicionada e validada sob enqueue concorrente, replay idêntico e hash divergente | IA assistida |
 | 2026-09-21 | P-05 | in-progress | in-progress | revisão de código e segurança endureceu fencing, deadline, cancelamento e envelope canônico; particionamento/retenção e crash durability seguem pendentes | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | despacho bidirecional, aceite e resultado persistente validados por mTLS e PostgreSQL real; reconciliação após restart segue pendente | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | recuperação de comandos não terminais por fencing de redespacho validada com mTLS e claim concorrente no PostgreSQL real | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | worker real do agente integrado ao stream e validado ponta a ponta até resultado terminal; expiração, API, auditoria e UI seguem pendentes | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | expiração terminal periódica e durante claim implementada; PostgreSQL real comprovou estados seguros e idempotência; API, auditoria e UI seguem pendentes | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | API REST autorizada de lifecycle implementada com idempotência entre reconexões, contrato OpenAPI e testes de falha fechada; auditoria, consulta de estado e UI seguem pendentes | IA assistida |

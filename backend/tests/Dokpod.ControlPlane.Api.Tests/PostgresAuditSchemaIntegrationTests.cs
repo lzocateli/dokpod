@@ -182,6 +182,10 @@ public sealed class PostgresAuditSchemaIntegrationTests
                 .EnqueueAsync(
                     command with { Command = command.Command with { Kind = AgentCommandKind.StopContainer } },
                     TestContext.Current.CancellationToken);
+            var replayWithRenewedFencing = await new PostgresAgentCommandStore(secondContext)
+                .EnqueueAsync(
+                    command with { Command = command.Command with { FencingToken = 9 } },
+                    TestContext.Current.CancellationToken);
             var persisted = await setupContext.AgentCommands
                 .AsNoTracking()
                 .SingleAsync(
@@ -192,7 +196,9 @@ public sealed class PostgresAuditSchemaIntegrationTests
             Assert.Equal(1, outcomes.Count(outcome => outcome == AgentCommandEnqueueResult.Duplicate));
             Assert.Equal(AgentCommandEnqueueResult.ConflictingPayload, conflict);
             Assert.Equal(AgentCommandEnqueueResult.ConflictingPayload, envelopeConflict);
+            Assert.Equal(AgentCommandEnqueueResult.Duplicate, replayWithRenewedFencing);
             Assert.Equal(new string('A', 64), persisted.PayloadHash);
+            Assert.Equal(8, persisted.FencingToken);
         }
         finally
         {
@@ -200,6 +206,317 @@ public sealed class PostgresAuditSchemaIntegrationTests
                 .Where(item => item.EnvironmentId == environmentId)
                 .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
             await setupContext.EnvironmentRegistrations
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_StatusProgressionIsMonotonicAndTerminalReplayIsIdempotent()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+        var registration = EnvironmentRegistration.Create(
+            environmentId,
+            "command-status-" + Guid.NewGuid().ToString("N")[..12],
+            "lab-host",
+            enabled: true,
+            [EnvironmentResourceScopes.Read, EnvironmentResourceScopes.Manage]);
+        await new PostgresEnvironmentRegistrationStore(context)
+            .CreateAsync(registration, TestContext.Current.CancellationToken);
+
+        var createdAt = new DateTimeOffset(2026, 9, 21, 19, 0, 0, TimeSpan.Zero);
+        var command = new PersistedAgentCommand(
+            new AgentCommand(
+                environmentId,
+                commandId,
+                AgentCommandKind.RestartContainer,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "revision-01",
+                new string('A', 64),
+                createdAt.AddMinutes(1),
+                9),
+            ControlPlaneCommandState.Pending,
+            createdAt,
+            createdAt);
+        var store = new PostgresAgentCommandStore(context);
+
+        try
+        {
+            Assert.Equal(
+                AgentCommandEnqueueResult.Created,
+                await store.EnqueueAsync(command, TestContext.Current.CancellationToken));
+
+            var dispatched = new AgentCommandStatusUpdate(
+                environmentId,
+                commandId,
+                ControlPlaneCommandState.Dispatched,
+                null,
+                null,
+                createdAt.AddSeconds(1));
+            var accepted = dispatched with
+            {
+                State = ControlPlaneCommandState.Accepted,
+                UpdatedAtUtc = createdAt.AddSeconds(2),
+            };
+            var succeeded = accepted with
+            {
+                State = ControlPlaneCommandState.Succeeded,
+                ObservedContainerRevision = "revision-02",
+                UpdatedAtUtc = createdAt.AddSeconds(3),
+            };
+
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.Applied,
+                await store.ApplyStatusAsync(dispatched, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.Applied,
+                await store.ApplyStatusAsync(accepted, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.Applied,
+                await store.ApplyStatusAsync(succeeded, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.Duplicate,
+                await store.ApplyStatusAsync(succeeded, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.InvalidTransition,
+                await store.ApplyStatusAsync(
+                    succeeded with
+                    {
+                        State = ControlPlaneCommandState.Failed,
+                        FailureCode = "ENGINE_FAILURE",
+                    },
+                    TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.InvalidTransition,
+                await store.ApplyStatusAsync(accepted, TestContext.Current.CancellationToken));
+
+            var persisted = await context.AgentCommands
+                .AsNoTracking()
+                .SingleAsync(
+                    item => item.EnvironmentId == environmentId && item.CommandId == commandId,
+                    TestContext.Current.CancellationToken);
+            Assert.Equal(ControlPlaneCommandState.Succeeded, persisted.State);
+            Assert.Equal("revision-02", persisted.ObservedContainerRevision);
+            Assert.Equal(succeeded.UpdatedAtUtc, persisted.CompletedAtUtc);
+        }
+        finally
+        {
+            await context.AgentCommands
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+            await context.EnvironmentRegistrations
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_ClaimDispatchableRenewsDispatchFencingWithoutChangingOriginal()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+        var registration = EnvironmentRegistration.Create(
+            environmentId,
+            "command-claim-" + Guid.NewGuid().ToString("N")[..12],
+            "lab-host",
+            enabled: true,
+            [EnvironmentResourceScopes.Read, EnvironmentResourceScopes.Manage]);
+        await new PostgresEnvironmentRegistrationStore(context)
+            .CreateAsync(registration, TestContext.Current.CancellationToken);
+
+        var createdAt = new DateTimeOffset(2026, 9, 21, 20, 0, 0, TimeSpan.Zero);
+        const long originalFencingToken = 10;
+        const long reconnectedFencingToken = 11;
+        var command = new PersistedAgentCommand(
+            new AgentCommand(
+                environmentId,
+                commandId,
+                AgentCommandKind.RestartContainer,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "revision-01",
+                new string('A', 64),
+                createdAt.AddMinutes(5),
+                originalFencingToken),
+            ControlPlaneCommandState.Pending,
+            createdAt,
+            createdAt);
+        var store = new PostgresAgentCommandStore(context);
+
+        try
+        {
+            Assert.Equal(
+                AgentCommandEnqueueResult.Created,
+                await store.EnqueueAsync(command, TestContext.Current.CancellationToken));
+
+            await using var firstClaimContext = CreateContextOrSkip();
+            await using var secondClaimContext = CreateContextOrSkip();
+            var concurrentClaims = await Task.WhenAll(
+                new PostgresAgentCommandStore(firstClaimContext).ClaimDispatchableAsync(
+                    environmentId,
+                    originalFencingToken,
+                    createdAt,
+                    TestContext.Current.CancellationToken),
+                new PostgresAgentCommandStore(secondClaimContext).ClaimDispatchableAsync(
+                    environmentId,
+                    originalFencingToken,
+                    createdAt,
+                    TestContext.Current.CancellationToken));
+            var firstClaim = Assert.Single(concurrentClaims, claim => claim.Count == 1);
+            Assert.Equal(1, concurrentClaims.Sum(claim => claim.Count));
+            var repeatedClaim = await store.ClaimDispatchableAsync(
+                environmentId,
+                originalFencingToken,
+                createdAt.AddSeconds(1),
+                TestContext.Current.CancellationToken);
+            Assert.Equal(
+                AgentCommandStatusUpdateResult.Applied,
+                await store.ApplyStatusAsync(
+                    new AgentCommandStatusUpdate(
+                        environmentId,
+                        commandId,
+                        ControlPlaneCommandState.Accepted,
+                        null,
+                        null,
+                        createdAt.AddSeconds(2)),
+                    TestContext.Current.CancellationToken));
+            var reconnectedClaim = await store.ClaimDispatchableAsync(
+                environmentId,
+                reconnectedFencingToken,
+                createdAt.AddSeconds(3),
+                TestContext.Current.CancellationToken);
+            var persisted = await context.AgentCommands
+                .AsNoTracking()
+                .SingleAsync(
+                    item => item.EnvironmentId == environmentId && item.CommandId == commandId,
+                    TestContext.Current.CancellationToken);
+
+            Assert.Equal(originalFencingToken, Assert.Single(firstClaim).Command.FencingToken);
+            Assert.Empty(repeatedClaim);
+            Assert.Equal(reconnectedFencingToken, Assert.Single(reconnectedClaim).Command.FencingToken);
+            Assert.Equal(ControlPlaneCommandState.Accepted, reconnectedClaim[0].State);
+            Assert.Equal(originalFencingToken, persisted.FencingToken);
+            Assert.Equal(reconnectedFencingToken, persisted.LastDispatchFencingToken);
+        }
+        finally
+        {
+            await context.AgentCommands
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+            await context.EnvironmentRegistrations
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_ClaimDispatchableTerminallyExpiresOverdueCommands()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var registration = EnvironmentRegistration.Create(
+            environmentId,
+            "command-expiration-" + Guid.NewGuid().ToString("N")[..12],
+            "lab-host",
+            enabled: true,
+            [EnvironmentResourceScopes.Read, EnvironmentResourceScopes.Manage]);
+        await new PostgresEnvironmentRegistrationStore(context)
+            .CreateAsync(registration, TestContext.Current.CancellationToken);
+
+        var createdAt = new DateTimeOffset(2026, 9, 21, 21, 0, 0, TimeSpan.Zero);
+        var deadline = createdAt.AddMinutes(1);
+        var store = new PostgresAgentCommandStore(context);
+        var pendingId = Guid.NewGuid();
+        var dispatchedId = Guid.NewGuid();
+        var acceptedId = Guid.NewGuid();
+        var succeededId = Guid.NewGuid();
+        var futureId = Guid.NewGuid();
+
+        try
+        {
+            foreach (var commandId in new[] { pendingId, dispatchedId, acceptedId, succeededId, futureId })
+            {
+                var commandDeadline = commandId == futureId ? deadline.AddMinutes(1) : deadline;
+                await store.EnqueueAsync(
+                    new PersistedAgentCommand(
+                        new AgentCommand(
+                            environmentId,
+                            commandId,
+                            AgentCommandKind.RestartContainer,
+                            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                            "revision-01",
+                            new string('A', 64),
+                            commandDeadline,
+                            10),
+                        ControlPlaneCommandState.Pending,
+                        createdAt,
+                        createdAt),
+                    TestContext.Current.CancellationToken);
+            }
+
+            await store.ApplyStatusAsync(
+                new AgentCommandStatusUpdate(
+                    environmentId,
+                    dispatchedId,
+                    ControlPlaneCommandState.Dispatched,
+                    null,
+                    null,
+                    createdAt.AddSeconds(10)),
+                TestContext.Current.CancellationToken);
+            await store.ApplyStatusAsync(
+                new AgentCommandStatusUpdate(
+                    environmentId,
+                    acceptedId,
+                    ControlPlaneCommandState.Accepted,
+                    null,
+                    null,
+                    createdAt.AddSeconds(20)),
+                TestContext.Current.CancellationToken);
+            await store.ApplyStatusAsync(
+                new AgentCommandStatusUpdate(
+                    environmentId,
+                    succeededId,
+                    ControlPlaneCommandState.Succeeded,
+                    null,
+                    "revision-02",
+                    createdAt.AddSeconds(30)),
+                TestContext.Current.CancellationToken);
+
+            var dispatchable = await store.ClaimDispatchableAsync(
+                environmentId,
+                11,
+                deadline,
+                TestContext.Current.CancellationToken);
+            var repeatedExpiration = await store.ExpireNonTerminalAsync(
+                deadline.AddSeconds(1),
+                TestContext.Current.CancellationToken);
+            var persisted = await context.AgentCommands
+                .AsNoTracking()
+                .Where(command => command.EnvironmentId == environmentId)
+                .ToDictionaryAsync(command => command.CommandId, TestContext.Current.CancellationToken);
+
+            Assert.Equal(futureId, Assert.Single(dispatchable).Command.CommandId);
+            Assert.Equal(0, repeatedExpiration);
+            Assert.Equal(ControlPlaneCommandState.Failed, persisted[pendingId].State);
+            Assert.Equal(ControlPlaneCommandState.Indeterminate, persisted[dispatchedId].State);
+            Assert.Equal(ControlPlaneCommandState.Indeterminate, persisted[acceptedId].State);
+            Assert.Equal(ControlPlaneCommandState.Succeeded, persisted[succeededId].State);
+            Assert.Equal(ControlPlaneCommandState.Pending, persisted[futureId].State);
+            Assert.Equal("expired_command", persisted[pendingId].FailureCode);
+            Assert.Equal("expired_command", persisted[dispatchedId].FailureCode);
+            Assert.Equal("expired_command", persisted[acceptedId].FailureCode);
+            Assert.Equal(deadline, persisted[pendingId].CompletedAtUtc);
+            Assert.Equal(deadline, persisted[dispatchedId].CompletedAtUtc);
+            Assert.Equal(deadline, persisted[acceptedId].CompletedAtUtc);
+        }
+        finally
+        {
+            await context.AgentCommands
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+            await context.EnvironmentRegistrations
                 .Where(item => item.EnvironmentId == environmentId)
                 .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
         }

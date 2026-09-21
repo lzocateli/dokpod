@@ -31,6 +31,20 @@ public sealed class InMemoryAgentSessionStore : IAgentSessionStore
         }
     }
 
+    public ValueTask<AgentSession?> FindActiveAsync(
+        Guid environmentId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (gate)
+        {
+            return ValueTask.FromResult(
+                activeSessions.TryGetValue(environmentId, out var session)
+                    ? session
+                    : null);
+        }
+    }
+
     public ValueTask InvalidateEnvironmentAsync(Guid environmentId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

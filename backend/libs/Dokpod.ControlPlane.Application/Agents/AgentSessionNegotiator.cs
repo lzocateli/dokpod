@@ -19,6 +19,8 @@ public interface IAgentSessionStore
 {
     ValueTask<AgentSession> ActivateAsync(Guid environmentId, CancellationToken cancellationToken);
 
+    ValueTask<AgentSession?> FindActiveAsync(Guid environmentId, CancellationToken cancellationToken);
+
     ValueTask InvalidateEnvironmentAsync(Guid environmentId, CancellationToken cancellationToken);
 
     bool IsActive(AgentSession session);

@@ -58,6 +58,61 @@ public sealed class AgentCommandProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_NotifiesAdmissionBeforeExecutingMutation()
+    {
+        var journal = new MemoryCommandJournal();
+        var engine = new FakeEngine
+        {
+            Container = CreateContainer("revision-01"),
+            BlockExecution = true,
+        };
+        var processor = CreateProcessor(journal, engine);
+        var admissionObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseAdmission = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var processing = processor.ProcessAsync(
+            CreateCommand(),
+            8,
+            async (admission, failureCode, cancellationToken) =>
+            {
+                Assert.Equal(CommandAdmission.Accepted, admission);
+                Assert.Null(failureCode);
+                admissionObserved.SetResult();
+                await releaseAdmission.Task.WaitAsync(cancellationToken);
+            },
+            TestContext.Current.CancellationToken);
+
+        await admissionObserved.Task.WaitAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(0, engine.ExecutionCount);
+
+        releaseAdmission.SetResult();
+        await engine.ExecutionStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+        engine.ReleaseExecution();
+        await processing;
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenAcceptedJournalHasNoResult_ResumesMutation()
+    {
+        var journal = new MemoryCommandJournal();
+        var engine = new FakeEngine { Container = CreateContainer("revision-01") };
+        var processor = CreateProcessor(journal, engine);
+        var command = CreateCommand();
+        await journal.AppendIfAbsentAsync(
+            new JournaledCommand(
+                command.EnvironmentId,
+                command.CommandId,
+                command.PayloadHash,
+                CommandAdmission.Accepted),
+            TestContext.Current.CancellationToken);
+
+        var result = await processor.ProcessAsync(command, 8, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CommandExecutionState.Succeeded, result.State);
+        Assert.Equal(1, engine.ExecutionCount);
+    }
+
+    [Fact]
     public async Task ProcessAsync_WhenExpiredCommandIsReplayed_ReturnsPersistedRejection()
     {
         var dataDirectory = Path.Combine(Path.GetTempPath(), $"dokpod-tests-{Guid.NewGuid():N}");
