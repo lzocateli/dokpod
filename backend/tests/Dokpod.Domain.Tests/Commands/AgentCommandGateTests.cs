@@ -80,6 +80,23 @@ public sealed class AgentCommandGateTests
         Assert.Equal(CommandAdmission.Expired, result);
     }
 
+    [Fact]
+    public async Task AdmitAsync_WhenStaleDeliveryIsRetriedWithActiveFencing_AcceptsCommand()
+    {
+        var journal = new MemoryCommandJournal();
+        var gate = new AgentCommandGate(journal, new FixedTimeProvider(Now));
+        var stale = CreateCommand("sha256:abc", fencingToken: 7);
+
+        var rejected = await gate.AdmitAsync(stale, activeFencingToken: 8, TestContext.Current.CancellationToken);
+        var retried = await gate.AdmitAsync(
+            stale with { FencingToken = 8 },
+            activeFencingToken: 8,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(CommandAdmission.StaleSession, rejected);
+        Assert.Equal(CommandAdmission.Accepted, retried);
+    }
+
     private static AgentCommand CreateCommand(string payloadHash, long fencingToken) =>
         new(
             Guid.Parse("f8158257-9f00-49c3-9411-1c8879a171d8"),

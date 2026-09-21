@@ -5,6 +5,8 @@ using System.Security.Claims;
 
 namespace Dokpod.ControlPlane.Api.Realtime;
 
+public sealed record InventoryChangedNotification(Guid EnvironmentId, ulong Revision);
+
 [Authorize]
 public sealed class ControlPlaneHub(IEnvironmentAuthorizationDecider authorizationDecider) : Hub
 {

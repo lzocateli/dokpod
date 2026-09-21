@@ -1,7 +1,10 @@
 using Dokpod.ControlPlane.Application.Environments;
+using Dokpod.ControlPlane.Application.Commands;
 using Dokpod.ControlPlane.Infrastructure;
 using Dokpod.Domain.Auditing;
+using Dokpod.Domain.Commands;
 using Dokpod.Domain.Environments;
+using Dokpod.Domain.Inventory;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -129,6 +132,179 @@ public sealed class PostgresAuditSchemaIntegrationTests
         Assert.Equal(registration.Enabled, persisted.Enabled);
         Assert.True(registration.Scopes.SetEquals(persisted.Scopes));
         Assert.Equal("dokpod", Assert.Single(schemaRows));
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_ConcurrentReplayIsIdempotentAndConflictingHashIsRejected()
+    {
+        await using var setupContext = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+        var registration = EnvironmentRegistration.Create(
+            environmentId,
+            "command-test-" + Guid.NewGuid().ToString("N")[..12],
+            "lab-host",
+            enabled: true,
+            [EnvironmentResourceScopes.Read, EnvironmentResourceScopes.Manage]);
+        await new PostgresEnvironmentRegistrationStore(setupContext)
+            .CreateAsync(registration, TestContext.Current.CancellationToken);
+
+        var createdAt = new DateTimeOffset(2026, 9, 21, 18, 0, 0, TimeSpan.Zero);
+        var command = new PersistedAgentCommand(
+            new AgentCommand(
+                environmentId,
+                commandId,
+                AgentCommandKind.RestartContainer,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "revision-01",
+                new string('A', 64),
+                createdAt.AddMinutes(1),
+                8),
+            ControlPlaneCommandState.Pending,
+            createdAt,
+            createdAt);
+
+        try
+        {
+            await using var firstContext = CreateContextOrSkip();
+            await using var secondContext = CreateContextOrSkip();
+            var outcomes = await Task.WhenAll(
+                new PostgresAgentCommandStore(firstContext)
+                    .EnqueueAsync(command, TestContext.Current.CancellationToken),
+                new PostgresAgentCommandStore(secondContext)
+                    .EnqueueAsync(command, TestContext.Current.CancellationToken));
+
+            var conflict = await new PostgresAgentCommandStore(secondContext)
+                .EnqueueAsync(
+                    command with { Command = command.Command with { PayloadHash = new string('B', 64) } },
+                    TestContext.Current.CancellationToken);
+            var envelopeConflict = await new PostgresAgentCommandStore(secondContext)
+                .EnqueueAsync(
+                    command with { Command = command.Command with { Kind = AgentCommandKind.StopContainer } },
+                    TestContext.Current.CancellationToken);
+            var persisted = await setupContext.AgentCommands
+                .AsNoTracking()
+                .SingleAsync(
+                    item => item.EnvironmentId == environmentId && item.CommandId == commandId,
+                    TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, outcomes.Count(outcome => outcome == AgentCommandEnqueueResult.Created));
+            Assert.Equal(1, outcomes.Count(outcome => outcome == AgentCommandEnqueueResult.Duplicate));
+            Assert.Equal(AgentCommandEnqueueResult.ConflictingPayload, conflict);
+            Assert.Equal(AgentCommandEnqueueResult.ConflictingPayload, envelopeConflict);
+            Assert.Equal(new string('A', 64), persisted.PayloadHash);
+        }
+        finally
+        {
+            await setupContext.AgentCommands
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+            await setupContext.EnvironmentRegistrations
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task InventoryProjectionStore_AppliesDeltaAndPersistsCurrentState()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var observedAt = new DateTimeOffset(2026, 9, 21, 9, 0, 0, TimeSpan.Zero);
+        var store = new PostgresInventoryProjectionStore(context);
+        var delta = new InventoryDelta(
+            0,
+            1,
+            [
+                new InventoryChange(
+                    InventoryChangeKind.Added,
+                    "container-1",
+                    new ContainerInventory(
+                        "container-1",
+                        "api",
+                        "dokpod/api:test",
+                        "Running",
+                        "revision-1",
+                        observedAt)),
+            ]);
+
+        try
+        {
+            var result = await store.ApplyDeltaAsync(
+                environmentId,
+                delta,
+                TestContext.Current.CancellationToken);
+            var projection = await context.InventoryProjections
+                .AsNoTracking()
+                .Include(item => item.Containers)
+                .SingleAsync(item => item.EnvironmentId == environmentId, TestContext.Current.CancellationToken);
+
+            Assert.Equal(InventoryReconciliationOutcome.Accepted, result.Outcome);
+            Assert.Equal(1, projection.Revision);
+            var container = Assert.Single(projection.Containers);
+            Assert.Equal("container-1", container.ContainerId);
+            Assert.Equal("revision-1", container.Revision);
+            Assert.Equal(observedAt, projection.ObservedAtUtc);
+        }
+        finally
+        {
+            await context.InventoryProjections
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task InventoryProjectionStore_ReplacesSnapshotAndReadsCursorPages()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        var observedAt = new DateTimeOffset(2026, 9, 21, 10, 0, 0, TimeSpan.Zero);
+        var store = new PostgresInventoryProjectionStore(context);
+
+        try
+        {
+            await store.ApplyDeltaAsync(
+                environmentId,
+                new InventoryDelta(
+                    0,
+                    1,
+                    [new InventoryChange(
+                        InventoryChangeKind.Added,
+                        "container-1",
+                        new ContainerInventory("container-1", "old", "fixture:old", "Stopped", "revision-1", observedAt))]),
+                TestContext.Current.CancellationToken);
+
+            var replacement = new InventorySnapshot(
+                environmentId,
+                2,
+                new Dictionary<string, ContainerInventory>(StringComparer.Ordinal)
+                {
+                    ["container-1"] = new("container-1", "api", "fixture:new", "Running", "revision-2", observedAt.AddMinutes(1)),
+                    ["container-2"] = new("container-2", "worker", "fixture:new", "Running", "revision-1", observedAt.AddMinutes(1)),
+                });
+            var result = await store.ReplaceSnapshotAsync(replacement, TestContext.Current.CancellationToken);
+            var firstPage = await store.GetPageAsync(environmentId, null, 1, TestContext.Current.CancellationToken);
+            var secondPage = await store.GetPageAsync(
+                environmentId,
+                firstPage!.NextContainerId,
+                1,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(InventoryReconciliationOutcome.Accepted, result.Outcome);
+            Assert.Equal(2UL, firstPage.Revision);
+            Assert.Equal("container-1", Assert.Single(firstPage.Containers).ContainerId);
+            Assert.Equal("api", firstPage.Containers[0].Name);
+            Assert.Equal("container-1", firstPage.NextContainerId);
+            Assert.Equal("container-2", Assert.Single(secondPage!.Containers).ContainerId);
+            Assert.Null(secondPage.NextContainerId);
+        }
+        finally
+        {
+            await context.InventoryProjections
+                .Where(item => item.EnvironmentId == environmentId)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+        }
     }
 
     private static ControlPlaneDbContext CreateContextOrSkip()

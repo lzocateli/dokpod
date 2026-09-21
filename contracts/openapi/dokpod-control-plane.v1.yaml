@@ -6,6 +6,51 @@ info:
 servers:
   - url: https://localhost:7443
 paths:
+  /api/v1/environments/{environmentId}/containers:
+    get:
+      operationId: listEnvironmentContainers
+      summary: Consulta o inventário reconciliado de containers do ambiente
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: environmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Cursor opaco retornado pela página anterior.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Página autorizada da projeção de inventário.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryPage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AccessDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /api/v1/environments/{environmentId}:
     get:
       operationId: getEnvironment
@@ -160,6 +205,50 @@ components:
               - container:restart
               - container:delete
               - audit:read
+    InventoryPage:
+      type: object
+      required: [environmentId, revision, observedAt, ageSeconds, containers]
+      additionalProperties: false
+      properties:
+        environmentId:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        observedAt:
+          type: string
+          format: date-time
+        ageSeconds:
+          type: integer
+          format: int64
+          minimum: 0
+        containers:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ContainerInventory'
+        nextCursor:
+          type: [string, 'null']
+    ContainerInventory:
+      type: object
+      required: [containerId, name, imageReference, state, revision, observedAt]
+      additionalProperties: false
+      properties:
+        containerId:
+          type: string
+        name:
+          type: string
+        imageReference:
+          type: string
+        state:
+          type: string
+        revision:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
     ProblemDetails:
       type: object
       required: [type, title, status, detail]

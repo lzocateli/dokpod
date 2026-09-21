@@ -1,14 +1,20 @@
 using System.Security.Cryptography.X509Certificates;
 using Dokpod.Agent.Contracts.V1;
 using Dokpod.ControlPlane.Application.Agents;
+using Dokpod.ControlPlane.Application.Inventory;
+using Dokpod.ControlPlane.Api.Realtime;
+using Dokpod.Domain.Inventory;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Dokpod.ControlPlane.Api.Agents;
 
 public sealed class AgentControlService(
     AgentSessionNegotiator negotiator,
-    IAgentSessionStore sessionStore) : AgentControl.AgentControlBase
+    IAgentSessionStore sessionStore,
+    InventoryProjectionService inventoryProjection,
+    IHubContext<ControlPlaneHub> hubContext) : AgentControl.AgentControlBase
 {
     private const int MaximumMessageBytes = 1_048_576;
     private static readonly TimeSpan HeartbeatTimeout = TimeSpan.FromSeconds(90);
@@ -74,6 +80,8 @@ public sealed class AgentControlService(
             });
 
             ulong lastSequence = 0;
+            ulong serverSequence = 1;
+            var snapshotAccumulator = new InventorySnapshotAccumulator(session.EnvironmentId);
             while (true)
             {
                 using var heartbeatTimeout = new CancellationTokenSource(HeartbeatTimeout);
@@ -118,9 +126,69 @@ public sealed class AgentControlService(
 
                 lastSequence = requestStream.Current.Metadata.Sequence;
 
-                if (requestStream.Current.PayloadCase != AgentMessage.PayloadOneofCase.Heartbeat)
+                switch (requestStream.Current.PayloadCase)
                 {
-                    throw new RpcException(new Status(StatusCode.Unimplemented, "agent_payload_not_supported"));
+                    case AgentMessage.PayloadOneofCase.Heartbeat:
+                        break;
+
+                    case AgentMessage.PayloadOneofCase.InventoryDelta:
+                        var result = await inventoryProjection.ApplyDeltaAsync(
+                            session.EnvironmentId,
+                            MapDelta(requestStream.Current.InventoryDelta),
+                            context.CancellationToken);
+                        if (result.Outcome is InventoryReconciliationOutcome.StaleBase or InventoryReconciliationOutcome.SequenceGap)
+                        {
+                            await responseStream.WriteAsync(new ControlPlaneMessage
+                            {
+                                Metadata = CreateServerMetadata(session, ++serverSequence),
+                                SnapshotRequest = new SnapshotRequest { ReasonCode = result.FailureCode ?? "inventory_reconciliation_required" },
+                            });
+                        }
+                        else if (result.Outcome == InventoryReconciliationOutcome.InvalidDelta)
+                        {
+                            throw new RpcException(new Status(StatusCode.InvalidArgument, result.FailureCode ?? "inventory_delta_invalid"));
+                        }
+                        else
+                        {
+                            await NotifyInventoryChangedAsync(
+                                session.EnvironmentId,
+                                result.Snapshot.Revision,
+                                context.CancellationToken);
+                        }
+
+                        break;
+
+                    case AgentMessage.PayloadOneofCase.SnapshotPage:
+                        var pageResult = snapshotAccumulator.AddPage(MapSnapshotPage(requestStream.Current.SnapshotPage));
+                        if (pageResult.Outcome == InventorySnapshotPageOutcome.Invalid)
+                        {
+                            throw new RpcException(new Status(
+                                StatusCode.InvalidArgument,
+                                pageResult.FailureCode ?? "inventory_snapshot_invalid"));
+                        }
+
+                        if (pageResult.Outcome == InventorySnapshotPageOutcome.Completed)
+                        {
+                            var snapshotResult = await inventoryProjection.ReplaceSnapshotAsync(
+                                pageResult.Snapshot!,
+                                context.CancellationToken);
+                            if (snapshotResult.Outcome != InventoryReconciliationOutcome.Accepted)
+                            {
+                                throw new RpcException(new Status(
+                                    StatusCode.FailedPrecondition,
+                                    snapshotResult.FailureCode ?? "inventory_snapshot_stale"));
+                            }
+
+                            await NotifyInventoryChangedAsync(
+                                session.EnvironmentId,
+                                snapshotResult.Snapshot.Revision,
+                                context.CancellationToken);
+                        }
+
+                        break;
+
+                    default:
+                        throw new RpcException(new Status(StatusCode.Unimplemented, "agent_payload_not_supported"));
                 }
             }
         }
@@ -135,4 +203,95 @@ public sealed class AgentControlService(
             timestamp.Seconds >= -62_135_596_800 &&
             timestamp.Seconds <= 253_402_300_799 &&
             timestamp.Nanos is >= 0 and <= 999_999_999;
+
+    private static MessageMetadata CreateServerMetadata(AgentSession session, ulong sequence) => new()
+    {
+        ProtocolVersion = AgentSessionNegotiator.ProtocolVersion,
+        SessionId = session.SessionId.ToString("D"),
+        FencingToken = session.FencingToken,
+        Sequence = sequence,
+        OccurredAt = Timestamp.FromDateTime(DateTime.UtcNow),
+        CorrelationId = Guid.NewGuid().ToString("D"),
+    };
+
+    private static Dokpod.Domain.Inventory.InventoryDelta MapDelta(
+        Dokpod.Agent.Contracts.V1.InventoryDelta message)
+    {
+        if (message.InventoryRevision == 0)
+        {
+            return new Dokpod.Domain.Inventory.InventoryDelta(message.BaseRevision, message.InventoryRevision, []);
+        }
+
+        var changes = message.Changes.Select(change =>
+        {
+            var kind = change.Kind switch
+            {
+                ChangeKind.Upsert => InventoryChangeKind.Updated,
+                ChangeKind.Remove => InventoryChangeKind.Removed,
+                _ => (InventoryChangeKind?)null,
+            };
+            if (kind is null)
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "inventory_change_kind_invalid"));
+            }
+
+            var containerId = string.IsNullOrWhiteSpace(change.ContainerId)
+                ? change.Container?.ContainerId
+                : change.ContainerId;
+            if (string.IsNullOrWhiteSpace(containerId) ||
+                (kind == InventoryChangeKind.Updated && change.Container is null))
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "inventory_change_invalid"));
+            }
+
+            var container = change.Container is null
+                ? null
+                : new ContainerInventory(
+                    containerId,
+                    change.Container.Name,
+                    change.Container.ImageReference,
+                    change.Container.State.ToString(),
+                    change.Container.Revision,
+                    change.Container.ObservedAt.ToDateTimeOffset());
+            return new InventoryChange(kind.Value, containerId, container);
+        }).ToArray();
+
+        return new Dokpod.Domain.Inventory.InventoryDelta(message.BaseRevision, message.InventoryRevision, changes);
+    }
+
+    private static Dokpod.ControlPlane.Application.Inventory.InventorySnapshotPage MapSnapshotPage(
+        Dokpod.Agent.Contracts.V1.InventorySnapshotPage message) =>
+        new(
+            message.SnapshotId,
+            message.InventoryRevision,
+            message.PageNumber,
+            message.IsLastPage,
+            message.Containers.Select(MapContainer).ToArray());
+
+    private static ContainerInventory MapContainer(ContainerState container)
+    {
+        if (string.IsNullOrWhiteSpace(container.ContainerId) || !IsValidTimestamp(container.ObservedAt))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "inventory_container_invalid"));
+        }
+
+        return new ContainerInventory(
+            container.ContainerId,
+            container.Name,
+            container.ImageReference,
+            container.State.ToString(),
+            container.Revision,
+            container.ObservedAt.ToDateTimeOffset());
+    }
+
+    private Task NotifyInventoryChangedAsync(
+        Guid environmentId,
+        ulong revision,
+        CancellationToken cancellationToken) =>
+        hubContext.Clients
+            .Group(ControlPlaneHub.GroupFor(environmentId.ToString("D")))
+            .SendAsync(
+                "inventoryChanged",
+                new InventoryChangedNotification(environmentId, revision),
+                cancellationToken);
 }

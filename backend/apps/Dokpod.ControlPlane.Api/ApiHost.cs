@@ -4,6 +4,7 @@ using System.Net.Security;
 using System.Net;
 using Dokpod.Agent.Contracts.V1;
 using Dokpod.ControlPlane.Api.Agents;
+using Dokpod.ControlPlane.Api.Commands;
 using Dokpod.ControlPlane.Application.Agents;
 using Dokpod.ControlPlane.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -17,7 +18,9 @@ using Dokpod.ControlPlane.Api.Realtime;
 using Dokpod.ControlPlane.Api.Authorization;
 using Dokpod.ControlPlane.Application.Authorization;
 using Dokpod.ControlPlane.Application.Auditing;
+using Dokpod.ControlPlane.Application.Commands;
 using Dokpod.ControlPlane.Application.Environments;
+using Dokpod.ControlPlane.Application.Inventory;
 using System.Security.Claims;
 using Dokpod.ControlPlane.Api.Endpoints;
 using Dokpod.ControlPlane.Api.Health;
@@ -116,11 +119,17 @@ public static class ApiHost
             .AddCheck<KeycloakReadinessHealthCheck>("keycloak", tags: ["ready", "keycloak"]);
         builder.Services.AddSingleton<IAgentIdentityRegistry, UnavailableAgentIdentityRegistry>();
         builder.Services.AddSingleton<IAgentSessionStore, InMemoryAgentSessionStore>();
+        builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
         builder.Services.AddScoped<AgentSessionNegotiator>();
         builder.Services.AddScoped<IAuditEventWriter, UnavailableAuditEventWriter>();
+        builder.Services.AddScoped<IAgentCommandStore, UnavailableAgentCommandStore>();
         builder.Services.AddScoped<IEnvironmentRegistrationStore, UnavailableEnvironmentRegistrationStore>();
+        builder.Services.AddScoped<IInventoryProjectionStore, UnavailableInventoryProjectionStore>();
         builder.Services.AddScoped<EnvironmentAccessService>();
         builder.Services.AddScoped<EnvironmentRegistrationService>();
+        builder.Services.AddScoped<AgentCommandQueueService>();
+        builder.Services.AddScoped<InventoryProjectionService>();
+        builder.Services.AddScoped<InventoryQueryService>();
         var databaseConnectionString = builder.Configuration.GetConnectionString("ControlPlane");
         if (!string.IsNullOrWhiteSpace(databaseConnectionString))
         {
@@ -166,6 +175,7 @@ public static class ApiHost
             subject = principal.FindFirstValue("sub")
         })).RequireAuthorization();
         EnvironmentEndpoints.Map(app);
+        InventoryEndpoints.Map(app);
         app.MapHub<ControlPlaneHub>("/hubs/control-plane").RequireAuthorization();
     }
 

@@ -26,7 +26,17 @@ public sealed class AgentCommandProcessor(
 
         if (admission != CommandAdmission.Accepted)
         {
-            return CreateResult(command, CommandExecutionState.Failed, MapAdmissionFailure(admission), null);
+            var rejection = CreateResult(
+                command,
+                CommandExecutionState.Failed,
+                MapAdmissionFailure(admission),
+                null);
+            if (admission != CommandAdmission.ConflictingPayload)
+            {
+                await journal.SaveResultAsync(rejection, CancellationToken.None);
+            }
+
+            return rejection;
         }
 
         var mutationLock = mutationLocks.GetOrAdd(
@@ -36,6 +46,11 @@ public sealed class AgentCommandProcessor(
 
         try
         {
+            if (command.DeadlineUtc <= timeProvider.GetUtcNow())
+            {
+                return await SaveAsync(CreateResult(command, CommandExecutionState.Failed, "expired_command", null));
+            }
+
             var container = await engine.InspectContainerAsync(command.ContainerId, cancellationToken);
             if (container is null)
             {
@@ -74,7 +89,7 @@ public sealed class AgentCommandProcessor(
 
         async Task<JournaledCommandResult> SaveAsync(JournaledCommandResult result)
         {
-            await journal.SaveResultAsync(result, cancellationToken);
+            await journal.SaveResultAsync(result, CancellationToken.None);
             return result;
         }
     }

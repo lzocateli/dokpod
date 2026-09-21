@@ -14,6 +14,9 @@ public sealed class OpenApiContractTests
         Assert.Contains("openapi: 3.1.0", contract, StringComparison.Ordinal);
         Assert.Contains("/api/v1/environments/{environmentId}:", contract, StringComparison.Ordinal);
         Assert.Contains("operationId: getEnvironment", contract, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/environments/{environmentId}/containers:", contract, StringComparison.Ordinal);
+        Assert.Contains("operationId: listEnvironmentContainers", contract, StringComparison.Ordinal);
+        Assert.Contains("maximum: 100", contract, StringComparison.Ordinal);
         Assert.Contains("/api/v1/environments:", contract, StringComparison.Ordinal);
         Assert.Contains("operationId: registerEnvironment", contract, StringComparison.Ordinal);
         Assert.Contains("application/problem+json:", contract, StringComparison.Ordinal);

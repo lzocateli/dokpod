@@ -2,7 +2,7 @@
 
 **Status:** approved  
 **Data de criação:** 2026-09-06  
-**Última atualização:** 2026-09-08
+**Última atualização:** 2026-09-21
 **Responsáveis:** equipe Dokpod  
 **Origem:** IA assistida  
 **Revisor humano:** Lincoln Zocateli  
@@ -91,22 +91,39 @@ Evidências:
 
 ### P-04: Inventário reconciliável
 
-**Status:** not-started  
+**Status:** in-progress  
 **Responsável:** Lincoln Zocateli  
 **Dependências:** P-03
 
 **Objetivo:** mostrar estado confiável e idade dos dados por ambiente.
 
 Entregas:
+
+- modelo de domínio para snapshots, deltas e mudanças de containers por revisão monotônica;
+- projeção PostgreSQL reconstruível por ambiente;
+- ingestão de deltas pelo stream gRPC autenticado, com solicitação de snapshot após base divergente ou lacuna de revisão.
+- montagem limitada e ordenada de snapshots paginados por sessão, persistidos atomicamente somente após a última página;
+- consulta REST autorizada por `environment:read`, com cursor opaco, limite máximo, revisão e idade da projeção;
+- invalidação SignalR mínima após delta aceito ou snapshot completo persistido.
+
 Validação:
 
 - reconexão, lacuna de sequência e carga nominal de 56 agentes, aproximadamente 1.120 containers e 30 usuários simultâneos sem perda ou crescimento ilimitado;
 Evidências:
 
-- pendente.
+- testes de domínio cobrem aplicação de delta, base stale, lacuna e revisão não monotônica;
+- testes de transporte mTLS comprovam solicitação de snapshot após lacuna de inventário;
+- teste de integração PostgreSQL real comprova aplicação de delta e persistência da projeção;
+- testes da aplicação cobrem ordenação, identidade e atomicidade de páginas, além da autorização anterior à leitura;
+- contrato OpenAPI documenta a consulta paginada do inventário e seus erros;
+- teste PostgreSQL real comprova substituição atômica de snapshot, atualização de container existente e paginação por cursor;
+- teste de transporte mTLS comprova persistência do snapshot completo e entrega da invalidação SignalR;
+- autorização HTTP horizontal permanece pendente;
+- carga nominal de 56 agentes, aproximadamente 1.120 containers e 30 usuários simultâneos por 30 minutos: **NOT RUN**.
+
 ### P-05: Ciclo de vida de containers
 
-**Status:** not-started  
+**Status:** in-progress  
 **Responsável:** Lincoln Zocateli  
 **Dependências:** P-04
 
@@ -120,7 +137,19 @@ Validação:
 - testes reais de sucesso, timeout, replay após restart, ID com payload divergente, alvo recriado, desconexão e resposta perdida.
 Evidências:
 
-- pendente.
+- núcleo local do agente valida deadline, fencing, tipo, alvo imutável, revisão e deduplicação por ID/hash;
+- journal em arquivo persiste comandos e resultados entre instâncias;
+- rejeições determinísticas são persistidas e reproduzidas após reabertura do journal sem executar a engine;
+- fencing stale é rejeitado antes do journal, permitindo redistribuição legítima na sessão ativa;
+- deadline é revalidado após a espera pela serialização e resultados terminais são persistidos mesmo após cancelamento do chamador;
+- control plane possui modelo de comando pendente e fila PostgreSQL com chave por ambiente/ID, deadline, fencing, estado e timestamps;
+- envelope do comando valida ação permitida, alvo imutável, revisão, SHA-256 canônico, deadline UTC e fencing positivo;
+- enqueue concorrente no PostgreSQL comprova um único vencedor, replay idêntico e rejeição de hash ou envelope divergente sem sobrescrita;
+- testes de domínio: 27 aprovados; testes de aplicação do agente: 18 aprovados; testes de infraestrutura do agente: 4 aprovados;
+- testes da aplicação do control plane: 13 aprovados; testes da API e integrações: 61 aprovados;
+- transições posteriores ao estado pendente, despacho pelo stream, reconciliação, API autorizada, auditoria e UI permanecem pendentes.
+- estratégia de particionamento/retenção da tabela de comandos e garantia de persistência do rename do journal contra queda de energia permanecem bloqueios operacionais antes de produção.
+
 ### P-06: Hardening e release candidata
 
 **Status:** not-started  
@@ -194,3 +223,9 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-08 | P-01 | in-progress | in-progress | host HTTPS/HTTP2, cliente gRPC com certificado e fencing por ambiente compilados; handshake end-to-end, revogação ativa, perda de resposta e reconexão permanecem pendentes | IA assistida |
 | 2026-09-08 | P-01 | in-progress | in-progress | dois testes focados adicionados e aprovados; handshake Kestrel end-to-end, revogação ativa, perda de resposta e reconexão permanecem pendentes | IA assistida |
 | 2026-09-17 | P-03 | not-started | in-progress | caso de uso, persistência de ambientes e endpoint protegido adicionados; integração real PostgreSQL/Keycloak e testes horizontais permanecem pendentes | IA assistida |
+| 2026-09-21 | P-04 | not-started | in-progress | reconciliação de deltas, projeção PostgreSQL e solicitação de snapshot por lacuna integradas ao stream; prova PostgreSQL real depende da configuração do ambiente | IA assistida |
+| 2026-09-21 | P-04 | in-progress | in-progress | snapshots paginados, substituição atômica, consulta REST autorizada e invalidação SignalR implementados; validações de integração e carga permanecem pendentes | IA assistida |
+| 2026-09-21 | P-04 | in-progress | in-progress | transporte mTLS de snapshot completo e invalidação SignalR validados; carga nominal permanece NOT RUN | IA assistida |
+| 2026-09-21 | P-05 | not-started | in-progress | replay durável de rejeições determinísticas validado após reabertura do journal, sem nova execução da engine | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | fila PostgreSQL adicionada e validada sob enqueue concorrente, replay idêntico e hash divergente | IA assistida |
+| 2026-09-21 | P-05 | in-progress | in-progress | revisão de código e segurança endureceu fencing, deadline, cancelamento e envelope canônico; particionamento/retenção e crash durability seguem pendentes | IA assistida |

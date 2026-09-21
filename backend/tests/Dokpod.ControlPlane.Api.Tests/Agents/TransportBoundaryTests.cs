@@ -6,7 +6,9 @@ using Dokpod.Agent.Contracts.V1;
 using Dokpod.Agent.Infrastructure.Protocol;
 using Dokpod.ControlPlane.Api;
 using Dokpod.ControlPlane.Api.Agents;
+using Dokpod.ControlPlane.Api.Realtime;
 using Dokpod.ControlPlane.Application.Agents;
+using Dokpod.ControlPlane.Application.Inventory;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -14,6 +16,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.SignalR;
 using Xunit;
 
 namespace Dokpod.ControlPlane.Api.Tests.Agents;
@@ -286,7 +289,7 @@ public sealed class TransportBoundaryTests
         var session = await EstablishSessionAsync(call);
         var message = CreateHeartbeat(session, 1);
         message.Heartbeat = null;
-        message.InventoryDelta = new InventoryDelta { InventoryRevision = 1 };
+        message.CommandResult = new CommandResult();
 
         await call.RequestStream.WriteAsync(message, TestContext.Current.CancellationToken);
 
@@ -295,6 +298,93 @@ public sealed class TransportBoundaryTests
 
         Assert.Equal(StatusCode.Unimplemented, exception.StatusCode);
         Assert.Equal("agent_payload_not_supported", exception.Status.Detail);
+    }
+
+    [Fact]
+    public async Task KestrelSession_WhenInventoryHasSequenceGap_RequestsSnapshot()
+    {
+        using var certificates = TestCertificates.Create();
+        var environmentId = Guid.NewGuid();
+        var fingerprint = Convert.ToHexString(SHA256.HashData(certificates.Agent.RawData));
+        var inventoryStore = new FixedInventoryProjectionStore(
+            Dokpod.Domain.Inventory.InventoryReconciliationOutcome.SequenceGap,
+            "sequence_gap");
+        await using var app = await StartApiAsync(certificates, environmentId, fingerprint, inventoryStore);
+        using var handler = CreateHttpHandler(certificates);
+        using var channel = GrpcChannel.ForAddress(GetGrpcEndpoint(app), new GrpcChannelOptions { HttpHandler = handler });
+        var client = new AgentControl.AgentControlClient(channel);
+        using var call = client.Connect(cancellationToken: TestContext.Current.CancellationToken);
+        var session = await EstablishSessionAsync(call);
+        var message = CreateHeartbeat(session, 1);
+        message.Heartbeat = null;
+        message.InventoryDelta = new InventoryDelta
+        {
+            BaseRevision = 1,
+            InventoryRevision = 3,
+        };
+
+        await call.RequestStream.WriteAsync(message, TestContext.Current.CancellationToken);
+
+        Assert.True(await call.ResponseStream.MoveNext(TestContext.Current.CancellationToken));
+        Assert.Equal(ControlPlaneMessage.PayloadOneofCase.SnapshotRequest, call.ResponseStream.Current.PayloadCase);
+        Assert.Equal("sequence_gap", call.ResponseStream.Current.SnapshotRequest.ReasonCode);
+        Assert.Equal(environmentId, inventoryStore.EnvironmentId);
+    }
+
+    [Fact]
+    public async Task KestrelSession_WhenSnapshotCompletes_PersistsAndNotifiesEnvironmentGroup()
+    {
+        using var certificates = TestCertificates.Create();
+        var environmentId = Guid.NewGuid();
+        var fingerprint = Convert.ToHexString(SHA256.HashData(certificates.Agent.RawData));
+        var inventoryStore = new FixedInventoryProjectionStore(
+            Dokpod.Domain.Inventory.InventoryReconciliationOutcome.Accepted,
+            string.Empty);
+        var hubContext = new RecordingHubContext();
+        await using var app = await StartApiAsync(
+            certificates,
+            environmentId,
+            fingerprint,
+            inventoryStore,
+            hubContext);
+        using var handler = CreateHttpHandler(certificates);
+        using var channel = GrpcChannel.ForAddress(GetGrpcEndpoint(app), new GrpcChannelOptions { HttpHandler = handler });
+        var client = new AgentControl.AgentControlClient(channel);
+        using var call = client.Connect(cancellationToken: TestContext.Current.CancellationToken);
+        var session = await EstablishSessionAsync(call);
+        var message = CreateHeartbeat(session, 1);
+        message.Heartbeat = null;
+        message.SnapshotPage = new Agent.Contracts.V1.InventorySnapshotPage
+        {
+            SnapshotId = Guid.NewGuid().ToString("D"),
+            InventoryRevision = 7,
+            PageNumber = 0,
+            IsLastPage = true,
+            Containers =
+            {
+                new ContainerState
+                {
+                    ContainerId = "container-1",
+                    Name = "api",
+                    ImageReference = "dokpod/api:test",
+                    State = ContainerLifecycleState.Running,
+                    Revision = "revision-1",
+                    ObservedAt = Timestamp.FromDateTime(DateTime.UtcNow),
+                },
+            },
+        };
+
+        await call.RequestStream.WriteAsync(message, TestContext.Current.CancellationToken);
+        await call.RequestStream.CompleteAsync();
+        Assert.False(await call.ResponseStream.MoveNext(TestContext.Current.CancellationToken));
+
+        Assert.Equal(environmentId, inventoryStore.EnvironmentId);
+        Assert.Equal(7UL, inventoryStore.Snapshot?.Revision);
+        Assert.Equal(ControlPlaneHub.GroupFor(environmentId.ToString("D")), hubContext.GroupName);
+        Assert.Equal("inventoryChanged", hubContext.Method);
+        var notification = Assert.IsType<InventoryChangedNotification>(Assert.Single(hubContext.Arguments!));
+        Assert.Equal(environmentId, notification.EnvironmentId);
+        Assert.Equal(7UL, notification.Revision);
     }
 
     private static AgentMessage CreateHeartbeat(SessionEstablished session, ulong sequence)
@@ -347,7 +437,9 @@ public sealed class TransportBoundaryTests
     private static async Task<WebApplication> StartApiAsync(
         TestCertificates certificates,
         Guid environmentId,
-        string fingerprint)
+        string fingerprint,
+        IInventoryProjectionStore? inventoryStore = null,
+        IHubContext<ControlPlaneHub>? hubContext = null)
     {
         var builder = ApiHost.CreateBuilder(
             [],
@@ -357,8 +449,20 @@ public sealed class TransportBoundaryTests
                 certificates.Server,
                 certificates.ValidateClient,
                 LoopbackOnly: true,
-                ConfigureServices: services => services.AddSingleton<IAgentIdentityRegistry>(
-                    new FixedAgentIdentityRegistry(environmentId, fingerprint))));
+                ConfigureServices: services =>
+                {
+                    services.AddSingleton<IAgentIdentityRegistry>(
+                        new FixedAgentIdentityRegistry(environmentId, fingerprint));
+                    if (inventoryStore is not null)
+                    {
+                        services.AddSingleton(inventoryStore);
+                    }
+
+                    if (hubContext is not null)
+                    {
+                        services.AddSingleton(hubContext);
+                    }
+                }));
         var app = builder.Build();
         ApiHost.MapEndpoints(app);
         await app.StartAsync(TestContext.Current.CancellationToken);
@@ -376,6 +480,106 @@ public sealed class TransportBoundaryTests
                 string.Equals(certificateFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase)
                     ? new AgentIdentity(environmentId, fingerprint)
                     : null);
+        }
+    }
+
+    private sealed class FixedInventoryProjectionStore(
+        Dokpod.Domain.Inventory.InventoryReconciliationOutcome outcome,
+        string failureCode) : IInventoryProjectionStore
+    {
+        public Guid? EnvironmentId { get; private set; }
+        public Dokpod.Domain.Inventory.InventorySnapshot? Snapshot { get; private set; }
+
+        public Task<Dokpod.Domain.Inventory.InventoryReconciliationResult> ApplyDeltaAsync(
+            Guid environmentId,
+            Dokpod.Domain.Inventory.InventoryDelta delta,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            EnvironmentId = environmentId;
+            return Task.FromResult(new Dokpod.Domain.Inventory.InventoryReconciliationResult(
+                Dokpod.Domain.Inventory.InventorySnapshot.Empty(environmentId, delta.BaseRevision),
+                outcome,
+                failureCode));
+        }
+
+        public Task<Dokpod.Domain.Inventory.InventoryReconciliationResult> ReplaceSnapshotAsync(
+            Dokpod.Domain.Inventory.InventorySnapshot snapshot,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            EnvironmentId = snapshot.EnvironmentId;
+            Snapshot = snapshot;
+            return Task.FromResult(new Dokpod.Domain.Inventory.InventoryReconciliationResult(
+                snapshot,
+                outcome,
+                failureCode));
+        }
+
+        public Task<InventoryProjectionPage?> GetPageAsync(
+            Guid environmentId,
+            string? afterContainerId,
+            int limit,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<InventoryProjectionPage?>(null);
+        }
+    }
+
+    private sealed class RecordingHubContext : IHubContext<ControlPlaneHub>
+    {
+        private readonly RecordingClientProxy proxy;
+
+        public RecordingHubContext()
+        {
+            proxy = new RecordingClientProxy(this);
+            Clients = new RecordingHubClients(this, proxy);
+        }
+
+        public IHubClients Clients { get; }
+        public IGroupManager Groups { get; } = new NoOpGroupManager();
+        public string? GroupName { get; set; }
+        public string? Method { get; set; }
+        public object?[]? Arguments { get; set; }
+
+        private sealed class RecordingHubClients(RecordingHubContext context, IClientProxy proxy) : IHubClients
+        {
+            public IClientProxy All => proxy;
+            public IClientProxy AllExcept(IReadOnlyList<string> excludedConnectionIds) => proxy;
+            public IClientProxy Client(string connectionId) => proxy;
+            public IClientProxy Clients(IReadOnlyList<string> connectionIds) => proxy;
+            public IClientProxy Group(string groupName)
+            {
+                context.GroupName = groupName;
+                return proxy;
+            }
+            public IClientProxy GroupExcept(string groupName, IReadOnlyList<string> excludedConnectionIds) => Group(groupName);
+            public IClientProxy Groups(IReadOnlyList<string> groupNames) => proxy;
+            public IClientProxy User(string userId) => proxy;
+            public IClientProxy Users(IReadOnlyList<string> userIds) => proxy;
+        }
+
+        private sealed class RecordingClientProxy(RecordingHubContext context) : IClientProxy
+        {
+            public Task SendCoreAsync(
+                string method,
+                object?[] args,
+                CancellationToken cancellationToken = default)
+            {
+                context.Method = method;
+                context.Arguments = args;
+                return Task.CompletedTask;
+            }
+        }
+
+        private sealed class NoOpGroupManager : IGroupManager
+        {
+            public Task AddToGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
+
+            public Task RemoveFromGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
         }
     }
 

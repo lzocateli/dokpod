@@ -8,7 +8,10 @@ public sealed class ControlPlaneDbContext(DbContextOptions<ControlPlaneDbContext
     public DbSet<AgentIdentityEntity> AgentIdentities => Set<AgentIdentityEntity>();
     public DbSet<AuditEventKeyEntity> AuditEventKeys => Set<AuditEventKeyEntity>();
     public DbSet<AuditEventEntity> AuditEvents => Set<AuditEventEntity>();
+    public DbSet<AgentCommandEntity> AgentCommands => Set<AgentCommandEntity>();
     public DbSet<EnvironmentRegistrationEntity> EnvironmentRegistrations => Set<EnvironmentRegistrationEntity>();
+    public DbSet<InventoryProjectionEntity> InventoryProjections => Set<InventoryProjectionEntity>();
+    public DbSet<InventoryContainerEntity> InventoryContainers => Set<InventoryContainerEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

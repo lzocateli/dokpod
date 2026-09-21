@@ -37,6 +37,7 @@ public sealed class ControlPlaneHttpSurfaceTests
         Assert.Contains("/api/v1/session", endpoints.Keys);
         Assert.Contains("/api/v1/environments", endpoints.Keys);
         Assert.Contains("/api/v1/environments/{environmentId:guid}", endpoints.Keys);
+        Assert.Contains("/api/v1/environments/{environmentId:guid}/containers", endpoints.Keys);
         Assert.Contains("/hubs/control-plane", endpoints.Keys);
         Assert.Contains("/health/live", endpoints.Keys);
         Assert.Contains("/health/ready", endpoints.Keys);
@@ -45,6 +46,7 @@ public sealed class ControlPlaneHttpSurfaceTests
         Assert.NotNull(endpoints["/api/v1/session"].Metadata.GetMetadata<IAuthorizeData>());
         Assert.NotNull(endpoints["/api/v1/environments"].Metadata.GetMetadata<IAuthorizeData>());
         Assert.NotNull(endpoints["/api/v1/environments/{environmentId:guid}"].Metadata.GetMetadata<IAuthorizeData>());
+        Assert.NotNull(endpoints["/api/v1/environments/{environmentId:guid}/containers"].Metadata.GetMetadata<IAuthorizeData>());
         Assert.NotNull(endpoints["/hubs/control-plane"].Metadata.GetMetadata<IAuthorizeData>());
 
         var healthChecks = app.Services
