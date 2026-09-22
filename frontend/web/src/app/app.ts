@@ -1,6 +1,11 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterLink, RouterOutlet } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
+
+interface AntiforgeryResponse {
+  requestToken: string;
+}
 
 interface BffSession {
   authenticated: boolean;
@@ -45,5 +50,20 @@ export class App implements OnInit {
   protected login(): void {
     const returnUrl = `${window.location.pathname}${window.location.search}`;
     window.location.assign(`bff/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+  }
+
+  protected async logout(): Promise<void> {
+    const { requestToken } = await firstValueFrom(
+      this.http.get<AntiforgeryResponse>('bff/antiforgery'),
+    );
+
+    await firstValueFrom(
+      this.http.post<void>('bff/logout', null, {
+        headers: { 'X-Dokpod-Antiforgery': requestToken },
+      }),
+    );
+
+    this.session.set(null);
+    window.location.assign('/');
   }
 }

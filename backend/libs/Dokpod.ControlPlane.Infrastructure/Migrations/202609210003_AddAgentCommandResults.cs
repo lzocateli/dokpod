@@ -9,21 +9,13 @@ public sealed class AddAgentCommandResults : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.Sql("""
-            ALTER TABLE dokpod.agent_commands
-                ADD COLUMN failure_code character varying(128),
-                ADD COLUMN observed_container_revision character varying(255),
-                ADD COLUMN completed_at_utc timestamp with time zone;
-            """);
+        migrationBuilder.Sql(MigrationSqlScriptLoader.Load(
+            "202609210003_AddAgentCommandResults/Up/01-AddResultColumns.sql"));
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.Sql("""
-            ALTER TABLE dokpod.agent_commands
-                DROP COLUMN completed_at_utc,
-                DROP COLUMN observed_container_revision,
-                DROP COLUMN failure_code;
-            """);
+        migrationBuilder.Sql(MigrationSqlScriptLoader.Load(
+            "202609210003_AddAgentCommandResults/Down/01-DropResultColumns.sql"));
     }
 }

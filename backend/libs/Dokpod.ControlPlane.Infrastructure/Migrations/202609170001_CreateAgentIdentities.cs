@@ -9,19 +9,13 @@ public partial class CreateAgentIdentities : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.Sql("""
-            CREATE TABLE agent_identities (
-                certificate_fingerprint character varying(64) NOT NULL CONSTRAINT pk_agent_identities PRIMARY KEY,
-                environment_id uuid NOT NULL,
-                revoked_at_utc timestamp with time zone NULL
-            );
-
-            CREATE INDEX ix_agent_identities_environment_id ON agent_identities (environment_id);
-            """);
+        migrationBuilder.Sql(MigrationSqlScriptLoader.Load(
+            "202609170001_CreateAgentIdentities/Up/01-CreateAgentIdentities.sql"));
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.Sql("DROP TABLE agent_identities;");
+        migrationBuilder.Sql(MigrationSqlScriptLoader.Load(
+            "202609170001_CreateAgentIdentities/Down/01-DropAgentIdentities.sql"));
     }
 }

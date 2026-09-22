@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using Dokpod.Domain.Commands;
 
 namespace Dokpod.Agent.Infrastructure.Commands;
@@ -7,10 +9,17 @@ public sealed class FileCommandJournal : ICommandJournal
 {
     private readonly string journalDirectory;
     private readonly string resultDirectory;
+    private readonly Action<string> flushDirectory;
 
     public FileCommandJournal(string dataDirectory)
+        : this(dataDirectory, FlushDirectory)
+    {
+    }
+
+    internal FileCommandJournal(string dataDirectory, Action<string> flushDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+        ArgumentNullException.ThrowIfNull(flushDirectory);
 
         if (!Path.IsPathFullyQualified(dataDirectory))
         {
@@ -19,6 +28,7 @@ public sealed class FileCommandJournal : ICommandJournal
 
         journalDirectory = Path.Combine(Path.GetFullPath(dataDirectory), "commands");
         resultDirectory = Path.Combine(Path.GetFullPath(dataDirectory), "results");
+        this.flushDirectory = flushDirectory;
     }
 
     public async Task<JournaledCommandResult?> FindResultAsync(
@@ -45,6 +55,7 @@ public sealed class FileCommandJournal : ICommandJournal
         {
             await WriteDurablyAsync(temporaryPath, result, cancellationToken);
             File.Move(temporaryPath, resultPath, overwrite: true);
+            flushDirectory(resultDirectory);
         }
         finally
         {
@@ -74,10 +85,12 @@ public sealed class FileCommandJournal : ICommandJournal
             try
             {
                 File.Move(temporaryPath, recordPath);
+                flushDirectory(journalDirectory);
                 return null;
             }
             catch (IOException) when (File.Exists(recordPath))
             {
+                flushDirectory(journalDirectory);
                 return await ReadAsync<JournaledCommand>(recordPath, cancellationToken);
             }
         }
@@ -113,6 +126,27 @@ public sealed class FileCommandJournal : ICommandJournal
         stream.Flush(flushToDisk: true);
     }
 
+    private static void FlushDirectory(string path)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var fileDescriptor = LinuxNative.Open(
+            path,
+            LinuxNative.OpenReadOnly | LinuxNative.OpenDirectory | LinuxNative.OpenCloseOnExec);
+        if (fileDescriptor < 0)
+        {
+            throw new IOException(
+                $"Could not open the journal directory for durable synchronization: {path}.",
+                new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError()));
+        }
+
+        using var handle = new SafeFileHandle((IntPtr)fileDescriptor, ownsHandle: true);
+        RandomAccess.FlushToDisk(handle);
+    }
+
     private static async Task<T> ReadAsync<T>(
         string path,
         CancellationToken cancellationToken)
@@ -137,4 +171,14 @@ public sealed class FileCommandJournal : ICommandJournal
             throw new InvalidDataException("The command journal record is invalid.", exception);
         }
     }
+}
+
+internal static partial class LinuxNative
+{
+    internal const int OpenReadOnly = 0;
+    internal const int OpenDirectory = 0x10000;
+    internal const int OpenCloseOnExec = 0x80000;
+
+    [LibraryImport("libc", EntryPoint = "open", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int Open(string path, int flags);
 }

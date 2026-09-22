@@ -5,7 +5,10 @@
 } @else if (session()?.authenticated) {
   <header class="app-header">
     <a routerLink="/" class="brand" aria-label="Dokpod, ambientes"><picture><source srcset="brand/dokpod-logo-dark.svg" media="(prefers-color-scheme: dark)" /><img src="brand/dokpod-logo-light.svg" alt="Dokpod" /></picture></a>
-    <div class="session-user"><span>SESSÃO ATIVA</span><strong>{{ session()?.name ?? session()?.subject ?? 'usuário' }}</strong></div>
+    <div class="session-actions">
+      <div class="session-user"><span>SESSÃO ATIVA</span><strong>{{ session()?.name ?? session()?.subject ?? 'usuário' }}</strong></div>
+      <button type="button" class="secondary" (click)="logout()">Sair</button>
+    </div>
   </header>
   <router-outlet />
 } @else {

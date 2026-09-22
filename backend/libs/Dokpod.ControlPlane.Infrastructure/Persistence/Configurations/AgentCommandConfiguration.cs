@@ -8,7 +8,7 @@ public sealed class AgentCommandConfiguration : IEntityTypeConfiguration<AgentCo
     public void Configure(EntityTypeBuilder<AgentCommandEntity> entity)
     {
         entity.ToTable("agent_commands");
-        entity.HasKey(command => new { command.EnvironmentId, command.CommandId });
+        entity.HasKey(command => new { command.EnvironmentId, command.CommandId, command.CreatedAtUtc });
         entity.Property(command => command.EnvironmentId).HasColumnName("environment_id");
         entity.Property(command => command.CommandId).HasColumnName("command_id");
         entity.Property(command => command.Kind).HasColumnName("kind").HasConversion<short>();

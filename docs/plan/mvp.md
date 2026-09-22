@@ -155,6 +155,8 @@ Evidências:
 - claim concorrente por compare-and-set entrega cada comando a apenas um reclamante, enquanto um fencing posterior permite nova tentativa para reconciliar resposta perdida;
 - worker do agente mantém stream mTLS, serializa metadata e sequência em um único writer, envia heartbeats durante mutações e reporta aceite antes do resultado terminal;
 - replay de comando aceito sem resultado retoma a mutação; replay com resultado persistido não repete o efeito no engine;
+- journal do agente Linux persiste o conteúdo com write-through e flush físico, publica registros por rename atômico e sincroniza a metadata do diretório antes de confirmar comando ou resultado;
+- testes da infraestrutura comprovam que comandos e resultados só retornam após o arquivo final existir e o diretório correspondente ser sincronizado; 6 testes aprovados, além de 23 testes da aplicação do agente sem regressão;
 - teste ponta a ponta com Kestrel executa o worker real do agente e comprova `Dispatched` → `Accepted` → `Succeeded` através do stream;
 - sweep periódico e claim de sessão terminalizam comandos vencidos com `expired_command`: `Pending` nunca despachado torna-se `Failed`, enquanto `Dispatched`, `Accepted` ou `Pending` já reclamado tornam-se `Indeterminate` porque o efeito pode ter ocorrido;
 - teste PostgreSQL real comprova a expiração, preservação de estados terminais e comandos futuros e idempotência do sweep;
@@ -168,13 +170,16 @@ Evidências:
 - replay de criação ou resultado terminal não duplica auditoria, e falha do writer desfaz a mutação do comando;
 - expiração gera evento terminal pelo ator técnico `control-plane`, com outcome `Failed` para comando nunca despachado e `Indeterminate` quando o efeito pode ter ocorrido;
 - resultado definitivo tardio reconcilia somente `Indeterminate` originado por `expired_command`, preservando os eventos de expiração e resultado na trilha append-only;
+- `agent_commands` usa partições mensais por `created_at_utc` e partição `DEFAULT` de segurança; `agent_command_keys` preserva idempotência global por ambiente/ID mesmo entre meses e após retenção futura de payloads;
+- migration forward-only validada desde banco PostgreSQL 17 vazio; 22 testes PostgreSQL reais aprovados, cobrindo roteamento mensal/default, pruning temporal, privilégios mínimos, operação pelo papel runtime, replay concorrente e lifecycle auditado;
+- rollover, diagnóstico e limites de retenção estão documentados em `docs/runbooks/operacao-comandos-postgresql.md`; descarte permanece desabilitado até aprovação humana da duração e da janela máxima de replay;
 - testes de domínio: 28 aprovados; testes de aplicação do agente: 23 aprovados; testes de infraestrutura do agente: 4 aprovados;
 - testes da aplicação do control plane: 29 aprovados; testes da API e integrações: 76 aprovados, incluindo 18 testes de schema e persistência com PostgreSQL real;
 - UI Angular de lifecycle implementada em rota lazy por ambiente, com inventário paginado, idade da projeção, estados loading/vazio/erro/forbidden/indisponível, ações filtradas por scope e confirmação contextual de exclusão;
 - cliente OpenAPI gerado opera same-origin pelo BFF, obtém antiforgery antes de mutações, envia chave idempotente e acompanha o comando por polling cancelável até estado terminal;
 - testes frontend: 10 aprovados, cobrindo catálogo, cadastro, sessão expirada, fachada de lifecycle, erro `403`, refresh após resultado terminal e headers/corpo efetivamente enviados pelo cliente gerado; build Angular de produção aprovado;
 - fluxo black-box autenticado e screenshots contra a stack E2E permanecem pendentes.
-- estratégia de particionamento/retenção da tabela de comandos e garantia de persistência do rename do journal contra queda de energia permanecem bloqueios operacionais antes de produção.
+- duração de retenção e janela máxima de replay dos tombstones permanecem decisões operacionais humanas antes de produção; a garantia equivalente do journal no agente Windows será qualificada em P-07.
 
 ### P-06: Hardening e release candidata
 
@@ -264,3 +269,4 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-21 | P-05 | in-progress | in-progress | auditoria append-only correlacionada por comando e atômica com intenção, resultado e expiração validada no PostgreSQL real; UI segue pendente | IA assistida |
 | 2026-09-21 | P-05 | in-progress | in-progress | UI Angular de inventário e lifecycle implementada com BFF, antiforgery, scopes, polling terminal e testes; E2E autenticado e catálogo de ambientes seguem pendentes | IA assistida |
 | 2026-09-21 | P-03 | in-progress | in-progress | catálogo autorizado e cadastro de ambientes adicionados à tela inicial; provisionamento Keycloak e E2E horizontal seguem pendentes | IA assistida |
+| 2026-09-22 | P-05 | in-progress | in-progress | comandos particionados mensalmente com chave global idempotente, fallback default, pruning e 22 testes PostgreSQL reais; duração de retenção aguarda decisão humana | IA assistida |

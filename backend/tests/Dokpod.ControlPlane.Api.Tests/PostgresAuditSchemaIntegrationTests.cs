@@ -15,6 +15,135 @@ namespace Dokpod.ControlPlane.Api.Tests;
 public sealed class PostgresAuditSchemaIntegrationTests
 {
     [Fact]
+    public async Task AgentCommands_RouteRowsToMonthlyAndDefaultPartitions()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        await CreateEnvironmentAsync(context, environmentId, "command-partition");
+        var store = new PostgresAgentCommandStore(context);
+        var monthlyCommand = CreateCommand(
+            environmentId,
+            Guid.NewGuid(),
+            new DateTimeOffset(2026, 9, 22, 0, 0, 0, TimeSpan.Zero));
+        var defaultCommand = CreateCommand(
+            environmentId,
+            Guid.NewGuid(),
+            new DateTimeOffset(2028, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        try
+        {
+            Assert.Equal(
+                AgentCommandEnqueueResult.Created,
+                await store.EnqueueAsync(monthlyCommand, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandEnqueueResult.Created,
+                await store.EnqueueAsync(defaultCommand, TestContext.Current.CancellationToken));
+
+            Assert.Equal(
+                "dokpod.agent_commands_2026_09",
+                await GetCommandPartitionAsync(context, monthlyCommand.Command.CommandId));
+            Assert.Equal(
+                "dokpod.agent_commands_default",
+                await GetCommandPartitionAsync(context, defaultCommand.Command.CommandId));
+        }
+        finally
+        {
+            await DeleteCommandEnvironmentAsync(context, environmentId);
+        }
+    }
+
+    [Fact]
+    public async Task AgentCommands_TimeRangeQueryPrunesUnrelatedPartitions()
+    {
+        await using var context = CreateContextOrSkip();
+        await context.Database.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using var command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = """
+            EXPLAIN (FORMAT JSON)
+            SELECT environment_id, command_id
+            FROM dokpod.agent_commands
+            WHERE created_at_utc >= TIMESTAMPTZ '2026-09-01T00:00:00Z'
+              AND created_at_utc < TIMESTAMPTZ '2026-10-01T00:00:00Z'
+            """;
+
+        var plan = Assert.IsType<string>(
+            await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("agent_commands_2026_09", plan, StringComparison.Ordinal);
+        Assert.DoesNotContain("agent_commands_2026_10", plan, StringComparison.Ordinal);
+        Assert.DoesNotContain("agent_commands_default", plan, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AgentCommandKeys_RestrictRuntimeMutationAndUseDefinerTriggers()
+    {
+        await using var context = CreateContextOrSkip();
+
+        var privileges = await context.Database
+            .SqlQueryRaw<string>("""
+                SELECT concat_ws(':',
+                    has_table_privilege('dokpod_runtime', 'dokpod.agent_command_keys', 'SELECT'),
+                    has_table_privilege('dokpod_runtime', 'dokpod.agent_command_keys', 'INSERT'),
+                    has_table_privilege('dokpod_runtime', 'dokpod.agent_command_keys', 'UPDATE'),
+                    has_table_privilege('dokpod_runtime', 'dokpod.agent_command_keys', 'DELETE')) AS "Value"
+                """)
+            .SingleAsync(TestContext.Current.CancellationToken);
+        var triggerFunctions = await context.Database
+            .SqlQueryRaw<string>("""
+                SELECT procedure.proname AS "Value"
+                FROM pg_proc procedure
+                JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+                WHERE namespace.nspname = 'dokpod'
+                  AND procedure.proname IN (
+                      'dokpod_reserve_agent_command_key',
+                      'dokpod_release_agent_command_key')
+                  AND procedure.prosecdef
+                ORDER BY procedure.proname
+                """)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("t:f:f:f", privileges);
+        Assert.Equal(
+            ["dokpod_release_agent_command_key", "dokpod_reserve_agent_command_key"],
+            triggerFunctions);
+    }
+
+    [Fact]
+    public async Task AgentCommandStore_RuntimeRoleUsesProtectedIdempotencyKeys()
+    {
+        await using var context = CreateContextOrSkip();
+        var environmentId = Guid.NewGuid();
+        await CreateEnvironmentAsync(context, environmentId, "command-runtime-role");
+        var command = CreateCommand(
+            environmentId,
+            Guid.NewGuid(),
+            new DateTimeOffset(2026, 9, 22, 2, 0, 0, TimeSpan.Zero));
+
+        try
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(
+                TestContext.Current.CancellationToken);
+            await context.Database.ExecuteSqlRawAsync(
+                "SET LOCAL ROLE dokpod_runtime",
+                TestContext.Current.CancellationToken);
+            var store = new PostgresAgentCommandStore(context);
+
+            Assert.Equal(
+                AgentCommandEnqueueResult.Created,
+                await store.EnqueueAsync(command, TestContext.Current.CancellationToken));
+            Assert.Equal(
+                AgentCommandEnqueueResult.Duplicate,
+                await store.EnqueueAsync(command, TestContext.Current.CancellationToken));
+
+            await transaction.RollbackAsync(TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            await DeleteCommandEnvironmentAsync(context, environmentId);
+        }
+    }
+
+    [Fact]
     public async Task AuditEvents_RouteRowsToMonthlyAndDefaultPartitions()
     {
         await using var context = CreateContextOrSkip();
@@ -216,6 +345,10 @@ public sealed class PostgresAuditSchemaIntegrationTests
                 .EnqueueAsync(
                     command with { Command = command.Command with { FencingToken = 9 } },
                     TestContext.Current.CancellationToken);
+            var replayWithDifferentCreatedAt = await new PostgresAgentCommandStore(secondContext)
+                .EnqueueAsync(
+                    command with { CreatedAtUtc = command.CreatedAtUtc.AddMonths(1) },
+                    TestContext.Current.CancellationToken);
             var snapshot = await new PostgresAgentCommandStore(secondContext)
                 .GetAsync(environmentId, commandId, TestContext.Current.CancellationToken);
             var persisted = await setupContext.AgentCommands
@@ -229,6 +362,7 @@ public sealed class PostgresAuditSchemaIntegrationTests
             Assert.Equal(AgentCommandEnqueueResult.ConflictingPayload, conflict);
             Assert.Equal(AgentCommandEnqueueResult.ConflictingPayload, envelopeConflict);
             Assert.Equal(AgentCommandEnqueueResult.Duplicate, replayWithRenewedFencing);
+            Assert.Equal(AgentCommandEnqueueResult.Duplicate, replayWithDifferentCreatedAt);
             Assert.Equal(new string('A', 64), persisted.PayloadHash);
             Assert.Equal(8, persisted.FencingToken);
             Assert.NotNull(snapshot);
@@ -1031,6 +1165,23 @@ public sealed class PostgresAuditSchemaIntegrationTests
                 JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
                 WHERE audit_events.event_id = {0}
                 """, eventId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        return Assert.Single(rows);
+    }
+
+    private static async Task<string> GetCommandPartitionAsync(
+        ControlPlaneDbContext context,
+        Guid commandId)
+    {
+        var rows = await context.Database
+            .SqlQueryRaw<string>("""
+                SELECT namespace.nspname || '.' || relation.relname AS "Value"
+                FROM dokpod.agent_commands agent_commands
+                JOIN pg_class relation ON relation.oid = agent_commands.tableoid
+                JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+                WHERE agent_commands.command_id = {0}
+                """, commandId)
             .ToListAsync(TestContext.Current.CancellationToken);
 
         return Assert.Single(rows);

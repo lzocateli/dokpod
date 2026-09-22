@@ -8,4 +8,8 @@
     <ProjectReference Include="../Dokpod.ControlPlane.Application/Dokpod.ControlPlane.Application.csproj" />
     <ProjectReference Include="../Dokpod.Domain/Dokpod.Domain.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations/Script/**/*.sql" />
+  </ItemGroup>
 </Project>

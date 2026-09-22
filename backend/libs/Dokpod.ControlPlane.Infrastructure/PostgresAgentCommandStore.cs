@@ -83,7 +83,7 @@ public sealed class PostgresAgentCommandStore(
                 {state},
                 {command.CreatedAtUtc},
                 {command.UpdatedAtUtc})
-            ON CONFLICT (environment_id, command_id) DO NOTHING
+            ON CONFLICT (environment_id, command_id, created_at_utc) DO NOTHING
             """, cancellationToken).ConfigureAwait(false);
 
         if (inserted == 1)
