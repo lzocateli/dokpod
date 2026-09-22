@@ -23,13 +23,25 @@ O valor acima é fictício. Não registre connection strings, senhas ou secrets 
 
 ## Rollover
 
-A migration cria partições mensais antecipadamente e uma partição `DEFAULT` de segurança. Antes do primeiro dia de cada mês, o operador deve:
+A migration `202609220002_ScheduleTemporalPartitions` cria partições mensais de
+`audit_events` e `agent_commands` de janeiro de 2026 até dezembro de 2036, além
+das partições `DEFAULT` de segurança. A função versionada
+`dokpod.dokpod_ensure_monthly_partitions(date)` permite ampliar esse horizonte
+sem reproduzir DDL manual.
 
-1. criar a partição do mês seguinte com `CREATE TABLE ... PARTITION OF audit_events`;
-2. confirmar que a faixa não sobrepõe partições existentes;
-3. confirmar que a partição `DEFAULT` não contém linhas daquela faixa;
-4. verificar os índices locais e o pruning com `EXPLAIN` em uma consulta autorizada;
-5. registrar a alteração no histórico operacional.
+Antes de o horizonte ficar abaixo de seis meses, o operador deve executar com a
+credencial de migration:
+
+```sql
+SELECT dokpod.dokpod_ensure_monthly_partitions(DATE '2038-01-01');
+```
+
+Antes da chamada, o operador deve:
+
+1. confirmar que o horizonte solicitado não ultrapassa o limite aceito pela função;
+2. confirmar que as partições `DEFAULT` não contêm linhas das novas faixas;
+3. verificar os índices locais e o pruning com `EXPLAIN` em consulta autorizada;
+4. registrar a alteração no histórico operacional.
 
 A partição `DEFAULT` evita perda silenciosa, mas não substitui o rollover. Linhas nela exigem diagnóstico e criação da faixa correta antes de qualquer movimentação controlada.
 
@@ -57,7 +69,11 @@ WHERE routine_schema = 'dokpod'
 ORDER BY routine_name;
 ```
 
-Resultado esperado: partições mensais planejadas, `audit_events_default`, funções no schema `dokpod` e somente `SELECT` nas tabelas para `dokpod_runtime`; escrita runtime ocorre por `EXECUTE` em `dokpod.dokpod_append_audit_event`, não por `INSERT` direto.
+Resultado esperado: 132 partições mensais por tabela até `*_2036_12`, partições
+`audit_events_default` e `agent_commands_default`, funções no schema `dokpod` e
+somente `SELECT` nas tabelas de auditoria para `dokpod_runtime`; escrita runtime
+ocorre por `EXECUTE` em `dokpod.dokpod_append_audit_event`, não por `INSERT`
+direto.
 
 Os testes `PostgresAuditSchemaIntegrationTests` usam uma conexão PostgreSQL efêmera somente quando
 `DOKPOD_TEST_POSTGRES_CONNECTION` está injetada no processo. Sem essa variável, os testes são pulados

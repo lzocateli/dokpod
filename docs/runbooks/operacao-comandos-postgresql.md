@@ -33,20 +33,20 @@ FROM dokpod.agent_commands_default;
 
 ## Rollover
 
-Execute com a credencial exclusiva de migration. Crie a próxima partição antes do primeiro dia do mês e use limites UTC semiabertos:
+As migrations criam partições mensais de janeiro de 2026 até dezembro de 2036.
+Execute a função versionada com a credencial exclusiva de migration antes de o
+horizonte restante ficar abaixo de seis meses:
 
 ```sql
-CREATE TABLE dokpod.agent_commands_AAAA_MM
-PARTITION OF dokpod.agent_commands
-FOR VALUES FROM ('AAAA-MM-01T00:00:00Z') TO ('AAAA-MM-01T00:00:00Z');
+SELECT dokpod.dokpod_ensure_monthly_partitions(DATE '2038-01-01');
 ```
 
-No segundo limite, substitua pelo primeiro dia do mês seguinte. Antes de criar:
+Antes de ampliar:
 
 1. confirme que a faixa não sobrepõe outra partição;
 2. confirme que `agent_commands_default` não contém linhas da faixa;
-3. crie a partição em uma janela controlada;
-4. mova linhas da faixa existentes na `DEFAULT` em uma transação;
+3. mova linhas da faixa existentes na `DEFAULT` em uma transação controlada;
+4. execute a função em uma janela controlada;
 5. valide índices locais e pruning com `EXPLAIN (FORMAT JSON)`;
 6. registre a alteração no histórico operacional.
 

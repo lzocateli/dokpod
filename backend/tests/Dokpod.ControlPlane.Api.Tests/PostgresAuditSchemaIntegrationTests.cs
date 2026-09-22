@@ -15,6 +15,43 @@ namespace Dokpod.ControlPlane.Api.Tests;
 public sealed class PostgresAuditSchemaIntegrationTests
 {
     [Fact]
+    public async Task TemporalPartitions_AreScheduledThrough2036ByLatestMigration()
+    {
+        await using var context = CreateContextOrSkip();
+
+        var pendingMigrations = await context.Database.GetPendingMigrationsAsync(
+            TestContext.Current.CancellationToken);
+        var appliedMigrations = await context.Database
+            .SqlQueryRaw<string>("""
+                SELECT "MigrationId" AS "Value"
+                FROM dokpod."__EFMigrationsHistory"
+                ORDER BY "MigrationId"
+                """)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        var auditPartitionCount = await GetMonthlyPartitionCountAsync(context, "audit_events");
+        var commandPartitionCount = await GetMonthlyPartitionCountAsync(context, "agent_commands");
+        var schedulingObjects = await context.Database
+            .SqlQueryRaw<string>("""
+                SELECT object_name AS "Value"
+                FROM unnest(ARRAY[
+                    to_regclass('dokpod.audit_events_default')::text,
+                    to_regclass('dokpod.agent_commands_default')::text,
+                    to_regclass('dokpod.audit_events_2036_12')::text,
+                    to_regclass('dokpod.agent_commands_2036_12')::text,
+                    to_regprocedure('dokpod.dokpod_ensure_monthly_partitions(date)')::text
+                ]) AS object_name
+                """)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(pendingMigrations);
+        Assert.Contains("202609220002_ScheduleTemporalPartitions", appliedMigrations);
+        Assert.Equal(132, auditPartitionCount);
+        Assert.Equal(132, commandPartitionCount);
+        Assert.DoesNotContain(schedulingObjects, string.IsNullOrWhiteSpace);
+        Assert.Equal(5, schedulingObjects.Count);
+    }
+
+    [Fact]
     public async Task AgentCommands_RouteRowsToMonthlyAndDefaultPartitions()
     {
         await using var context = CreateContextOrSkip();
@@ -28,7 +65,7 @@ public sealed class PostgresAuditSchemaIntegrationTests
         var defaultCommand = CreateCommand(
             environmentId,
             Guid.NewGuid(),
-            new DateTimeOffset(2028, 1, 1, 0, 0, 0, TimeSpan.Zero));
+            new DateTimeOffset(2041, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
         try
         {
@@ -152,7 +189,7 @@ public sealed class PostgresAuditSchemaIntegrationTests
         var monthlyEventId = Guid.NewGuid();
         var defaultEventId = Guid.NewGuid();
         await InsertAsync(context, monthlyEventId, new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero));
-        await InsertAsync(context, defaultEventId, new DateTimeOffset(2028, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        await InsertAsync(context, defaultEventId, new DateTimeOffset(2041, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
         var monthlyPartition = await GetPartitionAsync(context, monthlyEventId);
         var defaultPartition = await GetPartitionAsync(context, defaultEventId);
@@ -1185,6 +1222,26 @@ public sealed class PostgresAuditSchemaIntegrationTests
             .ToListAsync(TestContext.Current.CancellationToken);
 
         return Assert.Single(rows);
+    }
+
+    private static async Task<int> GetMonthlyPartitionCountAsync(
+        ControlPlaneDbContext context,
+        string parentTable)
+    {
+        var counts = await context.Database
+            .SqlQueryRaw<int>("""
+                SELECT count(*)::int AS "Value"
+                FROM pg_inherits inheritance
+                JOIN pg_class parent ON parent.oid = inheritance.inhparent
+                JOIN pg_namespace namespace ON namespace.oid = parent.relnamespace
+                JOIN pg_class child ON child.oid = inheritance.inhrelid
+                WHERE namespace.nspname = 'dokpod'
+                  AND parent.relname = {0}
+                  AND child.relname !~ '_default$'
+                """, parentTable)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        return Assert.Single(counts);
     }
 
     private static async Task CreateEnvironmentAsync(

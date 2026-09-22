@@ -171,7 +171,7 @@ Evidências:
 - expiração gera evento terminal pelo ator técnico `control-plane`, com outcome `Failed` para comando nunca despachado e `Indeterminate` quando o efeito pode ter ocorrido;
 - resultado definitivo tardio reconcilia somente `Indeterminate` originado por `expired_command`, preservando os eventos de expiração e resultado na trilha append-only;
 - `agent_commands` usa partições mensais por `created_at_utc` e partição `DEFAULT` de segurança; `agent_command_keys` preserva idempotência global por ambiente/ID mesmo entre meses e após retenção futura de payloads;
-- migration forward-only validada desde banco PostgreSQL 17 vazio; 22 testes PostgreSQL reais aprovados, cobrindo roteamento mensal/default, pruning temporal, privilégios mínimos, operação pelo papel runtime, replay concorrente e lifecycle auditado;
+- migrations forward-only validadas desde banco PostgreSQL 17 vazio; 23 testes PostgreSQL reais aprovados, cobrindo zero migrations pendentes, 132 partições mensais por tabela até dezembro de 2036, fallback `DEFAULT`, função versionada de rollover, pruning temporal, privilégios mínimos, operação pelo papel runtime, replay concorrente e lifecycle auditado;
 - rollover, diagnóstico e limites de retenção estão documentados em `docs/runbooks/operacao-comandos-postgresql.md`; descarte permanece desabilitado até aprovação humana da duração e da janela máxima de replay;
 - testes de domínio: 28 aprovados; testes de aplicação do agente: 23 aprovados; testes de infraestrutura do agente: 4 aprovados;
 - testes da aplicação do control plane: 29 aprovados; testes da API e integrações: 76 aprovados, incluindo 18 testes de schema e persistência com PostgreSQL real;
