@@ -1,0 +1,17 @@
+{
+  "servers": {
+    "po-ui": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "lzocateli/node:24.15.0-bookworm",
+        "npx",
+        "-y",
+        "@po-ui/mcp"
+      ]
+    }
+  }
+}

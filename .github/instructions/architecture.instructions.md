@@ -23,6 +23,7 @@ applyTo: "backend/**, frontend/**, contracts/**, deploy/**"
 - Tabelas ou coleções com potencial de crescimento elevado devem usar Table Partitioning/Declarative Partitioning por faixa temporal ou outra estratégia equivalente do banco adotado; a decisão deve cobrir granularidade, criação antecipada, rollover, retenção, índices, pruning, backup/restore e comportamento quando faltar uma partição.
 - Nova fronteira de confiança, mudança na integração Keycloak, protocolo ou mudança incompatível exige ADR.
 - Dependências externas exigem licença permissiva, gratuita e verificada na versão exata.
+- PO UI (`@po-ui/ng-components`) é a biblioteca de componentes fixada para o frontend Angular; adicionar biblioteca de UI concorrente ou reimplementar componente equivalente exige decisão humana explícita.
 - Testes de arquitetura impedem referências proibidas e ciclos.
 
 Consulte `docs/arquitetura.md` e `docs/adr/2026-0001-arquitetura-inicial.md`.

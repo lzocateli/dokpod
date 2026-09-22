@@ -20,8 +20,9 @@ applyTo: "frontend/**"
 - Exclusão exige confirmação contextual e nunca inclui volumes implicitamente.
 - Use control flow nativo e `track` estável em listas.
 - Atenda WCAG 2.2 AA, teclado completo, foco visível e movimento reduzido.
-- Use ícones de biblioteca permissiva aprovada e tooltip em ações não óbvias.
-- Evite cards aninhados, grandes raios, glassmorphism, gradientes decorativos e estética genérica de SaaS.
+- Use exclusivamente componentes PO UI (`@po-ui/ng-components`) para UI; não invente componente nem adote outra biblioteca de componentes. Veja `frontend-po-ui.instructions.md`.
+- Use ícones de `po-icon` e tooltip em ações não óbvias.
+- Evite cards aninhados, grandes raios, glassmorphism, gradientes decorativos e estética genérica de SaaS fora do tema PO UI do Dokpod.
 - Teste com Vitest e Playwright; valide desktop, mobile e console.
 
-Consulte `docs/frontend.md`.
+Consulte `docs/frontend.md`, `frontend-po-ui.instructions.md` e `frontend-visual-verification.instructions.md`.

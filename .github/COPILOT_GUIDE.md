@@ -110,6 +110,14 @@ Alvos: agente Linux em Docker e Worker Service Windows self-contained.
 Não publique; produza matriz de gates e recomendação GO/NO-GO.
 ```
 
+## Frontend Angular e PO UI
+
+PO UI (`@po-ui/ng-components`) é a única biblioteca de componentes aprovada para o frontend. Antes de desenhar uma tela, consulte `https://po-ui.io/llms.txt` (índice), `https://po-ui.io/llms-full.txt` (documentação completa) ou, preferencialmente, o servidor MCP `po-ui` configurado em `.vscode/mcp.json` (ferramentas `list_components`, `search_docs`, `get_component_docs`, `get_guide`, `get_component_examples`). Regras completas em `.github/instructions/frontend-po-ui.instructions.md`.
+
+Se nenhum componente do portfólio atender a necessidade, não invente substituto: registre a lacuna e pergunte antes de prosseguir.
+
+Toda tela ou componente novo passa por um loop de screenshot, análise e ajuste (`frontend-visual-verification.instructions.md`) antes de ser considerado pronto, com no máximo 3 iterações antes de perguntar.
+
 ## Validações esperadas
 
 - .NET: build e testes containerizados do projeto ou solução afetada;

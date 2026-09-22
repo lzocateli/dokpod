@@ -8,6 +8,8 @@ applyTo: "backend/tests/**, frontend/tests/**, frontend/**/*.spec.ts, frontend/*
 
 - Teste comportamento observável e falhas, não detalhes privados.
 - Use xUnit no .NET, Vitest no Angular e Playwright em jornadas.
+- Testes de UI cobrem o comportamento Dokpod sobre componentes PO UI (dados, estado, integração); não reteste comportamento interno já validado pela biblioteca (foco, ARIA, teclado do próprio componente).
+- O loop de verificação visual (`frontend-visual-verification.instructions.md`) é evidência de desenvolvimento; não substitui Vitest nem Playwright como gate formal.
 - Domínio usa testes unitários; adapters usam engines e PostgreSQL reais.
 - Não use mocks como evidência principal de compatibilidade Docker/Podman.
 - Cubra sucesso, cancelamento, timeout, replay, resposta perdida e reconexão.
