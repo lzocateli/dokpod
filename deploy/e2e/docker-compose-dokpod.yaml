@@ -29,7 +29,8 @@ services:
       DOKPOD_API_HEALTH_PORT: 8080
       DOKPOD_API_CERTIFICATE_PATH: /certs/api.pfx
       DOKPOD_API_CERTIFICATE_PASSWORD: ${DOKPOD_E2E_API_CERTIFICATE_PASSWORD:-}
-      Authentication__Keycloak__Authority: http://keycloak:8080/realms/${KEYCLOAK_REALM:-dokpod}
+      Authentication__Keycloak__Authority: https://localhost:7443/realms/${KEYCLOAK_REALM:-dokpod}
+      Authentication__Keycloak__BackchannelAuthority: http://keycloak:8080/realms/${KEYCLOAK_REALM:-dokpod}
       Authentication__Keycloak__Audience: dokpod-api
       Authentication__Keycloak__DecisionTimeoutSeconds: 15
       ConnectionStrings__ControlPlane: ${DOKPOD_CONTROLPLANE_CONNECTION:?Defina DOKPOD_CONTROLPLANE_CONNECTION no secret externo}

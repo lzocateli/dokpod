@@ -21,6 +21,32 @@ public sealed class KeycloakAuthorizationOptionsTests
     }
 
     [Fact]
+    public void Validate_AcceptsDevelopmentBackchannelWithMatchingRealmPath()
+    {
+        var result = Validate(new KeycloakAuthorizationOptions
+        {
+            Authority = "https://localhost:7443/realms/dokpod",
+            BackchannelAuthority = "http://keycloak:8080/realms/dokpod",
+            Audience = "dokpod-api"
+        });
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public void Validate_RejectsBackchannelWithDifferentRealmPath()
+    {
+        var result = Validate(new KeycloakAuthorizationOptions
+        {
+            Authority = "https://localhost:7443/realms/dokpod",
+            BackchannelAuthority = "http://keycloak:8080/realms/other",
+            Audience = "dokpod-api"
+        });
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
     public void Validate_AllowsLoopbackHttpOnlyForDevelopmentConfiguration()
     {
         var result = Validate(new KeycloakAuthorizationOptions

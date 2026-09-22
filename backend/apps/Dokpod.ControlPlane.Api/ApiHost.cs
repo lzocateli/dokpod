@@ -79,6 +79,8 @@ public static class ApiHost
         });
 
         builder.Configuration["Authentication:Keycloak:Authority"] ??= "https://keycloak.invalid/realms/dokpod";
+        builder.Configuration["Authentication:Keycloak:BackchannelAuthority"] ??=
+            builder.Configuration["Authentication:Keycloak:Authority"];
         builder.Configuration["Authentication:Keycloak:Audience"] ??= "dokpod-api";
         builder.Configuration["Authentication:Keycloak:DecisionTimeoutSeconds"] ??= "3";
 
@@ -88,6 +90,7 @@ public static class ApiHost
             options.MaxSendMessageSize = 1_048_576;
         });
         var authority = builder.Configuration["Authentication:Keycloak:Authority"];
+        var backchannelAuthority = builder.Configuration["Authentication:Keycloak:BackchannelAuthority"];
         var audience = builder.Configuration["Authentication:Keycloak:Audience"];
         builder.Services.AddOptions<KeycloakAuthorizationOptions>()
             .BindConfiguration(KeycloakAuthorizationOptions.SectionName)
@@ -96,9 +99,14 @@ public static class ApiHost
             .AddJwtBearer(options =>
             {
                 options.Authority = authority;
+                options.MetadataAddress = $"{backchannelAuthority!.TrimEnd('/')}/.well-known/openid-configuration";
                 options.Audience = audience;
                 options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
                 options.MapInboundClaims = false;
+                options.TokenValidationParameters.ValidIssuer = authority!.TrimEnd('/');
+                options.BackchannelHttpHandler = new KeycloakBackchannelHandler(
+                    new Uri(authority, UriKind.Absolute),
+                    new Uri(backchannelAuthority, UriKind.Absolute));
             });
         builder.Services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder()

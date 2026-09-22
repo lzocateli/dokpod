@@ -417,6 +417,28 @@ function Ensure-AudienceClientScope {
     Write-Output "Reconciliado client scope dokpod-api-audience em $ClientUuid."
 }
 
+function Ensure-AuthorizationScopes {
+    param([Parameter(Mandatory)][string] $ClientUuid)
+
+    $authzBase = "/admin/realms/$Realm/clients/$ClientUuid/authz/resource-server"
+    foreach ($scopeName in @(
+        'environment:read',
+        'environment:manage',
+        'container:start',
+        'container:stop',
+        'container:restart',
+        'container:delete',
+        'audit:read')) {
+        $encodedScope = [Uri]::EscapeDataString($scopeName)
+        $scope = @(Invoke-KeycloakApi GET "$authzBase/scope?name=$encodedScope&exact=true") |
+            Where-Object name -eq $scopeName | Select-Object -First 1
+        if (-not $scope) {
+            Invoke-KeycloakApi POST "$authzBase/scope" @{ name = $scopeName } | Out-Null
+            Write-Output "Criado scope UMA $scopeName em $ClientUuid."
+        }
+    }
+}
+
 function Ensure-GroupPath {
     param([Parameter(Mandatory)][string[]] $Segments)
 
@@ -565,6 +587,7 @@ $apiClient = @{
     serviceAccountsEnabled = $true; authorizationServicesEnabled = $true; protocol = 'openid-connect'
 }
 $apiClientUuid = Ensure-Client $apiClient
+Ensure-AuthorizationScopes -ClientUuid $apiClientUuid
 
 $provisionerClient = @{
     clientId = 'dokpod-provisioner'; name = 'Dokpod Provisioner'; enabled = $true; publicClient = $false

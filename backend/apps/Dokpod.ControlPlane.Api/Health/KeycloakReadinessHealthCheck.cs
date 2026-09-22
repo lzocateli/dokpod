@@ -16,7 +16,7 @@ public sealed class KeycloakReadinessHealthCheck(
         {
             using var request = new HttpRequestMessage(
                 HttpMethod.Get,
-                $"{options.Value.Authority.TrimEnd('/')}/.well-known/openid-configuration");
+                $"{options.Value.EffectiveBackchannelAuthority.TrimEnd('/')}/.well-known/openid-configuration");
             using var response = await httpClientFactory
                 .CreateClient(nameof(KeycloakReadinessHealthCheck))
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)

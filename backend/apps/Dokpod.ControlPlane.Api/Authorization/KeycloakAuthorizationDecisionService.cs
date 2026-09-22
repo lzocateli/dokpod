@@ -44,7 +44,7 @@ public sealed class KeycloakAuthorizationDecisionService(
         var authorizationOptions = options.Value;
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
-            $"{authorizationOptions.Authority.TrimEnd('/')}/protocol/openid-connect/token");
+            $"{authorizationOptions.EffectiveBackchannelAuthority.TrimEnd('/')}/protocol/openid-connect/token");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
