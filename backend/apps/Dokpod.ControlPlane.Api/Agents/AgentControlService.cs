@@ -9,6 +9,7 @@ using Google.Protobuf.WellKnownTypes;
 using Google.Protobuf;
 using Grpc.Core;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 
 namespace Dokpod.ControlPlane.Api.Agents;
 
@@ -19,7 +20,8 @@ public sealed class AgentControlService(
     IAgentCommandStore commandStore,
     AgentCommandStatusService commandStatusService,
     InventoryProjectionService inventoryProjection,
-    IHubContext<ControlPlaneHub> hubContext) : AgentControl.AgentControlBase
+    IHubContext<ControlPlaneHub> hubContext,
+    ILogger<AgentControlService> logger) : AgentControl.AgentControlBase
 {
     private const int MaximumMessageBytes = 1_048_576;
     private static readonly TimeSpan HeartbeatTimeout = TimeSpan.FromSeconds(90);
@@ -29,6 +31,7 @@ public sealed class AgentControlService(
         IServerStreamWriter<ControlPlaneMessage> responseStream,
         ServerCallContext context)
     {
+        logger.LogInformation("Agent control connection received");
         if (!await requestStream.MoveNext(context.CancellationToken) ||
             requestStream.Current.PayloadCase != AgentMessage.PayloadOneofCase.Hello)
         {
@@ -52,8 +55,13 @@ public sealed class AgentControlService(
         }
         catch (AgentSessionRejectedException exception)
         {
+            logger.LogWarning("Agent control negotiation rejected with {FailureCode}", exception.FailureCode);
             throw new RpcException(new Status(StatusCode.PermissionDenied, exception.FailureCode));
         }
+
+        logger.LogInformation(
+            "Agent control session negotiated for environment {EnvironmentId}",
+            session.EnvironmentId);
 
         var invalidated = sessionStore.WaitUntilInactiveAsync(session, CancellationToken.None);
         using var sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);

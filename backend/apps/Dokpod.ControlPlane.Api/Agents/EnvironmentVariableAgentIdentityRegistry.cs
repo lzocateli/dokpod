@@ -20,4 +20,13 @@ public sealed class EnvironmentVariableAgentIdentityRegistry : IAgentIdentityReg
 
         return ValueTask.FromResult<AgentIdentity?>(new AgentIdentity(environmentId, certificateFingerprint));
     }
+
+    public Task<bool> RevokeEnvironmentAsync(
+        Guid environmentId,
+        DateTimeOffset revokedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(false);
+    }
 }

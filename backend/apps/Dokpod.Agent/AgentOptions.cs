@@ -9,7 +9,8 @@ public sealed record AgentOptions(
     Uri? ControlPlaneEndpoint,
     Guid? EnvironmentId,
     string ClientCertificatePath,
-    string? ClientCertificatePassword)
+    string? ClientCertificatePassword,
+    string? ServerCaCertificatePath)
 {
     public static AgentOptions FromEnvironment()
     {
@@ -28,7 +29,7 @@ public sealed record AgentOptions(
 
         return new AgentOptions(
             dataDirectory,
-            GetAbsolutePath("DOKPOD_AGENT_DOCKER_SOCKET", "/run/docker.sock"),
+            GetDockerSocketPath(),
             TimeSpan.FromSeconds(GetBoundedInteger("DOKPOD_AGENT_ENGINE_TIMEOUT_SECONDS", 30, 1, 300)),
             TimeSpan.FromSeconds(GetBoundedInteger("DOKPOD_AGENT_INVENTORY_INTERVAL_SECONDS", 30, 5, 900)),
             string.Equals(Environment.GetEnvironmentVariable("DOKPOD_AGENT_RUN_ONCE"), "true", StringComparison.OrdinalIgnoreCase),
@@ -37,7 +38,8 @@ public sealed record AgentOptions(
             GetAbsolutePath(
                 "DOKPOD_AGENT_CLIENT_CERTIFICATE_PATH",
                 Path.Combine(dataDirectory, "identity", "agent.pfx")),
-            Environment.GetEnvironmentVariable("DOKPOD_AGENT_CLIENT_CERTIFICATE_PASSWORD"));
+            Environment.GetEnvironmentVariable("DOKPOD_AGENT_CLIENT_CERTIFICATE_PASSWORD"),
+            GetOptionalAbsolutePath("DOKPOD_AGENT_SERVER_CA_CERTIFICATE_PATH"));
     }
 
     private static string GetAbsolutePath(string variableName, string defaultValue)
@@ -49,6 +51,16 @@ public sealed record AgentOptions(
         }
 
         return Path.GetFullPath(value);
+    }
+
+    private static string GetDockerSocketPath() =>
+        Environment.GetEnvironmentVariable("DOKPOD_AGENT_DOCKER_SOCKET")
+        ?? (OperatingSystem.IsWindows() ? "docker_engine" : "/run/docker.sock");
+
+    private static string? GetOptionalAbsolutePath(string variableName)
+    {
+        var value = Environment.GetEnvironmentVariable(variableName);
+        return string.IsNullOrWhiteSpace(value) ? null : GetAbsolutePath(variableName, value);
     }
 
     private static int GetBoundedInteger(string variableName, int defaultValue, int minimum, int maximum)

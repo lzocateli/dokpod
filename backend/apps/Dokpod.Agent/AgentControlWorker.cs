@@ -34,8 +34,13 @@ public sealed class AgentControlWorker(
         using var certificate = X509CertificateLoader.LoadPkcs12FromFile(
             options.ClientCertificatePath,
             options.ClientCertificatePassword,
-            X509KeyStorageFlags.EphemeralKeySet);
-        await using var client = AgentGrpcClient.Create(endpoint, certificate);
+            System.OperatingSystem.IsWindows()
+                ? X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet
+                : X509KeyStorageFlags.EphemeralKeySet);
+        using var serverCaCertificate = options.ServerCaCertificatePath is null
+            ? null
+            : X509CertificateLoader.LoadCertificateFromFile(options.ServerCaCertificatePath);
+        await using var client = AgentGrpcClient.Create(endpoint, certificate, serverCaCertificate);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -49,7 +54,10 @@ public sealed class AgentControlWorker(
             }
             catch (Exception exception) when (exception is RpcException or HttpRequestException or IOException)
             {
-                logger.LogWarning("Agent control session disconnected with status {Status}", GetStatus(exception));
+                logger.LogWarning(
+                    exception,
+                    "Agent control session disconnected with status {Status}",
+                    GetStatus(exception));
             }
 
             await Task.Delay(ReconnectDelay, stoppingToken);

@@ -41,11 +41,53 @@ public sealed class EnvironmentAccessService(
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(actor);
 
+        return await AuthorizeAndAuditAsync(
+            registration.EnvironmentId,
+            requiredScope,
+            actor,
+            accessToken,
+            actorKind,
+            "environment.register",
+            correlationId,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<EnvironmentAccessDecisionResult> RevokeAsync(
+        Guid environmentId,
+        AuthenticatedActor actor,
+        string accessToken,
+        Guid correlationId,
+        CancellationToken cancellationToken) => AuthorizeAndAuditAsync(
+            environmentId,
+            EnvironmentResourceScopes.Manage,
+            actor,
+            accessToken,
+            AuditActorKind.User,
+            "environment.revoke",
+            correlationId,
+            cancellationToken);
+
+    private async Task<EnvironmentAccessDecisionResult> AuthorizeAndAuditAsync(
+        Guid environmentId,
+        string requiredScope,
+        AuthenticatedActor actor,
+        string accessToken,
+        AuditActorKind actorKind,
+        string action,
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        if (environmentId == Guid.Empty)
+        {
+            throw new ArgumentException("Environment ID is required.", nameof(environmentId));
+        }
+
         EnvironmentAuthorizationDecision authorization;
         try
         {
             authorization = await authorizationDecider.DecideAsync(
-                $"urn:dokpod:environment:{registration.EnvironmentId:D}",
+                $"urn:dokpod:environment:{environmentId:D}",
                 requiredScope,
                 actor,
                 accessToken,
@@ -86,8 +128,8 @@ public sealed class EnvironmentAccessService(
             correlationId,
             actorKind,
             actor.Subject,
-            "environment.register",
-            registration.EnvironmentId,
+            action,
+            environmentId,
             outcome,
             failureCode);
 

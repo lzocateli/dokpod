@@ -188,6 +188,20 @@ if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) {
 
 $EnvFile = (Resolve-Path -LiteralPath $EnvFile).Path
 
+if ([string]::IsNullOrWhiteSpace($env:DOKPOD_E2E_CERTIFICATE_DIRECTORY)) {
+    $certificateRoot = if ($env:APPDATA) {
+        Join-Path $env:APPDATA 'Microsoft' 'UserSecrets' 'Dokpod'
+    }
+    else {
+        Join-Path $HOME '.microsoft' 'usersecrets' 'Dokpod'
+    }
+    $env:DOKPOD_E2E_CERTIFICATE_DIRECTORY = Join-Path $certificateRoot 'certs'
+}
+
+if (-not (Test-Path -LiteralPath $env:DOKPOD_E2E_CERTIFICATE_DIRECTORY -PathType Container)) {
+    Write-UsageError "Pasta externa de certificados não encontrada em '$env:DOKPOD_E2E_CERTIFICATE_DIRECTORY'. Gere a PKI de laboratório conforme deploy/e2e/README.md."
+}
+
 if (-not $IdentityEnvFile) {
     $IdentityEnvFile = if ($env:APPDATA) {
         Join-Path $env:APPDATA 'Microsoft' 'UserSecrets' 'Altivy.Identity' '.env'
@@ -214,6 +228,10 @@ $env:DOKPOD_CONTROLPLANE_CONNECTION = "Host=postgres;Port=5432;Database=keycloak
 
 $services = @($Service | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 $profiles = @($ComposeProfile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+if ($profiles -contains 'agent' -and [string]::IsNullOrWhiteSpace($env:DOKPOD_E2E_AGENT_ENVIRONMENT_ID)) {
+    Write-UsageError "O perfil agent exige DOKPOD_E2E_AGENT_ENVIRONMENT_ID com uma identidade previamente provisionada no PostgreSQL."
+}
 
 if ($RemoveVolumes -and $Action -ne 'Down') {
     Write-UsageError "-RemoveVolumes é válido somente com -Action Down."

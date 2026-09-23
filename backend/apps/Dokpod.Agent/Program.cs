@@ -15,9 +15,9 @@ builder.Services.AddWindowsService(service => service.ServiceName = "Dokpod Agen
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<ICommandJournal>(_ => new FileCommandJournal(options.DataDirectory));
-builder.Services.AddSingleton(_ => DockerEngineClient.CreateUnixSocketClient(
-    options.DockerSocketPath,
-    options.EngineTimeout));
+builder.Services.AddSingleton(_ => OperatingSystem.IsWindows()
+    ? DockerEngineClient.CreateNamedPipeClient(options.DockerSocketPath, options.EngineTimeout)
+    : DockerEngineClient.CreateUnixSocketClient(options.DockerSocketPath, options.EngineTimeout));
 builder.Services.AddSingleton<IContainerEngine, DockerEngineClient>();
 builder.Services.AddSingleton<AgentCommandGate>();
 builder.Services.AddSingleton<AgentCommandProcessor>();

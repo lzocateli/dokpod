@@ -2,7 +2,7 @@
 
 **Status:** approved  
 **Data de criação:** 2026-09-06  
-**Última atualização:** 2026-09-21
+**Última atualização:** 2026-09-23
 **Responsáveis:** equipe Dokpod  
 **Origem:** IA assistida  
 **Revisor humano:** Lincoln Zocateli  
@@ -45,7 +45,12 @@ Evidências:
 - testes focados de transporte aprovados (12 testes), incluindo handshake Kestrel/mTLS, fencing por reconexão, invalidação ativa de sessão e rejeição de metadados inválidos;
 - testes focados do negociador aprovados (4 testes), cobrindo fingerprint, EKU, versão de protocolo, enums e capabilities;
 - invalidação ativa encerra o stream com `agent_session_fenced` e a confirmação do handshake verifica a sessão antes do primeiro envio;
-- revogação persistente da identidade, bloqueio de reconexão após revogação e integração com o caso de uso de cadastro permanecem pendentes para P-03;
+- revogação persistente da identidade foi implementada com autorização `environment:manage`, auditoria `environment.revoke` e endpoint administrativo;
+- invalidação ativa da sessão após revogação foi integrada ao caso de uso e coberta por testes;
+- agente Linux em container validado contra Docker Desktop real com mTLS, API 1.47, inventário de 16 containers e sessão gRPC estabelecida;
+- agente Windows publicado self-contained `win-x64` e executado fora de container nesta máquina; named pipe Docker, API 1.47, inventário e sessão gRPC mTLS foram validados;
+- script `deploy/agent/manage-windows-service.ps1` implementado para instalar, iniciar, parar, reiniciar, consultar e remover o serviço; `--help`, ciclo de vida em `DryRun` e recuperação automática limitada foram validados sem efeitos colaterais;
+- prova de bloqueio de reconexão após revogação com PostgreSQL/Keycloak ponta a ponta permanece pendente para P-03;
 
 ### P-02: Fundação do monorepo e contratos
 **Status:** in-progress  
@@ -90,6 +95,9 @@ Evidências:
 - caso de uso, persistência de ambientes e endpoint protegido implementados; integração real PostgreSQL/Keycloak e testes horizontais permanecem pendentes.
 - catálogo paginado `GET /api/v1/environments` implementado com autorização `environment:read` por recurso, omissão de ambientes negados, falha fechada em decisão indeterminada e ausência de total global;
 - tela inicial Angular lista os ambientes autorizados, diferencia habilitados e desabilitados e permite cadastrar um ambiente previamente provisionado no Keycloak com antiforgery e tratamento de conflito;
+- stack E2E construída e saudável com web, BFF, API, PostgreSQL e Keycloak; acesso público pelo gateway retornou `200` e rota protegida sem sessão retornou `302` para login;
+- PKI E2E externa gerada em UserSecrets com CA local, certificado de servidor `serverAuth` e certificado de agente `clientAuth`; API, gateway e health foram validados com a nova cadeia;
+- jornada autenticada, identidade/ambiente provisionado do agente e validação de reconexão após revogação permanecem pendentes; o perfil `agent` exige UUID e identidade previamente provisionados no PostgreSQL;
 
 ### P-04: Inventário reconciliável
 
@@ -197,7 +205,10 @@ Validação:
 
 Evidências:
 
-- pendente.
+- agente Windows self-contained `win-x64` publicado e executado em console nesta máquina, usando named pipe `docker_engine` e certificado mTLS externo;
+- script de ciclo de vida do Windows Service documentado e validado em `DryRun`, incluindo inicialização atrasada e duas tentativas de recuperação; instalação real, conta dedicada, ACL, atualização e rollback permanecem pendentes;
+- Docker Windows/ named pipe, conta de usuário do processo e conexão gRPC foram validados; instalação como Windows Service, ACL dedicada, atualização e rollback permanecem pendentes;
+- Podman Linux e Windows Server ainda não foram qualificados.
 
 ### P-07: Qualificar capabilities adicionais
 
@@ -270,3 +281,4 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-21 | P-05 | in-progress | in-progress | UI Angular de inventário e lifecycle implementada com BFF, antiforgery, scopes, polling terminal e testes; E2E autenticado e catálogo de ambientes seguem pendentes | IA assistida |
 | 2026-09-21 | P-03 | in-progress | in-progress | catálogo autorizado e cadastro de ambientes adicionados à tela inicial; provisionamento Keycloak e E2E horizontal seguem pendentes | IA assistida |
 | 2026-09-22 | P-05 | in-progress | in-progress | comandos particionados mensalmente com chave global idempotente, fallback default, pruning e 22 testes PostgreSQL reais; duração de retenção aguarda decisão humana | IA assistida |
+| 2026-09-23 | P-03 | in-progress | in-progress | revogação persistente da identidade do agente e invalidação ativa da sessão adicionadas com autorização, auditoria, endpoint e testes; integração real PostgreSQL/Keycloak e E2E seguem pendentes | IA assistida |

@@ -35,6 +35,11 @@ sessão atual:
 - `DOKPOD_E2E_AGENT_CERTIFICATE_FINGERPRINT`, opcional para o laboratório de agentes;
 - `DOKPOD_E2E_AGENT_ENVIRONMENT_ID`, opcional, GUID do ambiente associado ao certificado do agente.
 
+Com o perfil `agent`, a pasta padrão de certificados é
+`$env:APPDATA\Microsoft\UserSecrets\Dokpod\certs`. Ela deve conter
+`dokpod-agent.pfx` e `dokpod-dev-ca.crt`; o UUID informado deve possuir uma
+identidade correspondente em `dokpod.agent_identities`.
+
 O script recomendado também lê `POSTGRES_ADMIN_USERNAME` e
 `POSTGRES_ADMIN_PASSWORD` do arquivo externo
 `$env:APPDATA\Microsoft\UserSecrets\Altivy.Identity\.env`. Ele deriva somente
@@ -90,6 +95,7 @@ partir da raiz do repositório:
 
 ./tools/scripts/manage-e2e-stack.ps1 -Action Config
 ./tools/scripts/manage-e2e-stack.ps1 -Action Up -Build
+./tools/scripts/manage-e2e-stack.ps1 -Action Up -Build -ComposeProfile agent
 ./tools/scripts/manage-e2e-stack.ps1 -Action Recreate -Service api -NoDeps
 ./tools/scripts/manage-e2e-stack.ps1 -Action Down -Service agent
 ./tools/scripts/manage-e2e-stack.ps1 -Action Down
@@ -128,6 +134,31 @@ Para incluir o agente Docker local:
 
 O mount `/var/run/docker.sock:/run/docker.sock` concede privilégio elevado sobre
 o host Docker local. Use o perfil `agent` somente em laboratório controlado.
+
+## Validar o agente Windows self-contained
+
+O agente também pode ser publicado como `win-x64` e executado fora de
+container em uma máquina Windows com Docker Desktop. O adapter usa o named pipe
+`docker_engine` e o endpoint gRPC publicado pela stack:
+
+```powershell
+docker run --rm -v "${PWD}:/workspace" -w /workspace `
+  lzocateli/dotnet-sdk:10.0.400-noble `
+  dotnet publish backend/apps/Dokpod.Agent/Dokpod.Agent.csproj `
+  --configuration Release --runtime win-x64 --self-contained true `
+  --output artifacts/agent/windows-e2e
+
+$env:DOKPOD_AGENT_CONTROL_PLANE_ENDPOINT = 'https://127.0.0.1:17443'
+$env:DOKPOD_AGENT_ENVIRONMENT_ID = '<uuid-do-ambiente-provisionado>'
+$env:DOKPOD_AGENT_DOCKER_SOCKET = 'docker_engine'
+$env:DOKPOD_AGENT_CLIENT_CERTIFICATE_PATH = Join-Path $env:APPDATA 'Microsoft\UserSecrets\Dokpod\certs\dokpod-agent.pfx'
+$env:DOKPOD_AGENT_SERVER_CA_CERTIFICATE_PATH = Join-Path $env:APPDATA 'Microsoft\UserSecrets\Dokpod\certs\dokpod-dev-ca.crt'
+$env:DOKPOD_AGENT_DATA_DIRECTORY = Join-Path $env:APPDATA 'Microsoft\UserSecrets\Dokpod\agent-windows-e2e'
+& ./artifacts/agent/windows-e2e/Dokpod.Agent.exe
+```
+
+Esta execução em console é uma prova técnica. Instalação como Windows Service,
+ACL dedicada, atualização e rollback continuam gates de P-07.
 
 ## Encerrar
 

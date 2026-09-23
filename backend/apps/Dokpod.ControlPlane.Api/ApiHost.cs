@@ -1,5 +1,6 @@
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Cryptography;
 using System.Net.Security;
 using System.Net;
 using Dokpod.Agent.Contracts.V1;
@@ -139,6 +140,7 @@ public static class ApiHost
         builder.Services.AddScoped<IInventoryProjectionStore, UnavailableInventoryProjectionStore>();
         builder.Services.AddScoped<EnvironmentAccessService>();
         builder.Services.AddScoped<EnvironmentRegistrationService>();
+        builder.Services.AddScoped<AgentIdentityRevocationService>();
         builder.Services.AddScoped<AgentCommandQueueService>();
         builder.Services.AddScoped<ContainerCommandService>();
         builder.Services.AddScoped<ContainerCommandQueryService>();
@@ -202,6 +204,10 @@ public static class ApiHost
             ?? throw new InvalidOperationException("DOKPOD_API_CERTIFICATE_PATH is required.");
         var certificatePassword = Environment.GetEnvironmentVariable("DOKPOD_API_CERTIFICATE_PASSWORD");
         var certificate = X509CertificateLoader.LoadPkcs12FromFile(certificatePath, certificatePassword);
+        var clientCaPath = Environment.GetEnvironmentVariable("DOKPOD_API_CLIENT_CA_CERTIFICATE_PATH");
+        var clientCaCertificate = string.IsNullOrWhiteSpace(clientCaPath)
+            ? null
+            : X509CertificateLoader.LoadCertificateFromFile(clientCaPath);
         var port = int.TryParse(Environment.GetEnvironmentVariable("DOKPOD_API_GRPC_PORT"), out var configuredPort)
             ? configuredPort
             : 7443;
@@ -209,6 +215,40 @@ public static class ApiHost
             ? configuredHealthPort
             : 8080;
 
-        return new ApiHostOptions(port, healthPort, certificate);
+        Func<X509Certificate2, X509Chain?, SslPolicyErrors, bool>? clientValidation =
+            clientCaCertificate is null
+                ? null
+                : (certificate, chain, errors) => ValidateClientCertificate(certificate, clientCaCertificate);
+
+        return new ApiHostOptions(
+            port,
+            healthPort,
+            certificate,
+            clientValidation);
+    }
+
+    private static bool ValidateClientCertificate(
+        X509Certificate2? clientCertificate,
+        X509Certificate2 trustedRoot)
+    {
+        if (clientCertificate is null)
+        {
+            return false;
+        }
+
+        const string clientAuthenticationOid = "1.3.6.1.5.5.7.3.2";
+        var eku = clientCertificate.Extensions
+            .OfType<X509EnhancedKeyUsageExtension>()
+            .SingleOrDefault();
+        if (eku is null || !eku.EnhancedKeyUsages.Cast<Oid>().Any(oid => oid.Value == clientAuthenticationOid))
+        {
+            return false;
+        }
+
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(trustedRoot);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        return chain.Build(clientCertificate);
     }
 }

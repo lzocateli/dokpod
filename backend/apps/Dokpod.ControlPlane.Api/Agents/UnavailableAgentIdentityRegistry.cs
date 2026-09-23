@@ -11,4 +11,10 @@ public sealed class UnavailableAgentIdentityRegistry : IAgentIdentityRegistry
         cancellationToken.ThrowIfCancellationRequested();
         return ValueTask.FromResult<AgentIdentity?>(null);
     }
+
+    public Task<bool> RevokeEnvironmentAsync(
+        Guid environmentId,
+        DateTimeOffset revokedAtUtc,
+        CancellationToken cancellationToken) =>
+        Task.FromException<bool>(new InvalidOperationException("Agent identity persistence is unavailable."));
 }

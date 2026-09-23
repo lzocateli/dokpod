@@ -158,7 +158,8 @@ function Invoke-Api {
     $parameters = @{ Method = $Method; Uri = $Uri; Headers = @{ Authorization = "Bearer $script:accessToken" }; ErrorAction = 'Stop' }
     if ($null -ne $Body) { $parameters.ContentType = 'application/json'; $parameters.Body = $Body | ConvertTo-Json -Depth 10 -Compress }
     if ($useNoProxy) { $parameters.NoProxy = $true }
-    Invoke-RestMethod @parameters
+    try { Invoke-RestMethod @parameters }
+    catch { throw "Falha na API UMA em $Method ${Uri}: $($_.Exception.Message)" }
 }
 
 function Find-One {
@@ -176,7 +177,8 @@ if ([string]::IsNullOrWhiteSpace($script:accessToken)) { throw 'Keycloak não re
 $apiClient = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/clients?clientId=$clientId") "client $clientId"
 $authzBase = "$BaseUrl/admin/realms/$Realm/clients/$($apiClient.id)/authz/resource-server"
 $scopeRecord = Find-One (Invoke-Api GET "$authzBase/scope?name=$([Uri]::EscapeDataString($Scope))&exact=true") "scope $Scope"
-$resourceMatches = @(Invoke-Api GET "$authzBase/resource?name=$([Uri]::EscapeDataString($resourceName))&exactName=true") | Where-Object name -eq $resourceName
+$resourceResponse = @(Invoke-Api GET "$authzBase/resource?name=$([Uri]::EscapeDataString($resourceName))&exactName=true")
+$resourceMatches = @($resourceResponse | Where-Object { $null -ne $_ })
 if ($resourceMatches.Count -eq 0) {
     $resource = Invoke-Api POST "$authzBase/resource" @{
         name = $resourceName
@@ -189,34 +191,49 @@ if ($resourceMatches.Count -eq 0) {
 else { $resource = Find-One $resourceMatches "recurso $resourceName"; Write-Output "Recurso UMA já existe: $resourceName" }
 
 if ($OwnerUsername) {
-    $user = Find-One ((Invoke-Api GET "$BaseUrl/admin/realms/$Realm/users?username=$([Uri]::EscapeDataString($OwnerUsername))&exact=true") | Where-Object username -eq $OwnerUsername) "usuário $OwnerUsername"
+    $user = Find-One ((Invoke-Api GET "$BaseUrl/admin/realms/$Realm/users?username=$([Uri]::EscapeDataString($OwnerUsername))&exact=true") | Where-Object { $null -ne $_ -and $_.PSObject.Properties.Name -contains 'username' -and $_.username -eq $OwnerUsername }) "usuário $OwnerUsername"
     $policyName = "environment-$EnvironmentId-owner-$OwnerUsername"
     $policyType = 'user'
     $policyBody = @{ name = $policyName; type = 'user'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'; users = @([string]$user.id) }
 }
 else {
     $segments = $GroupPath.Trim('/').Split('/')
-    $parent = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups?search=$($segments[0])&exact=true" | Where-Object path -eq "/$($segments[0])") "grupo $($segments[0])"
+    $parent = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups?search=$($segments[0])&exact=true" | Where-Object { $null -ne $_ -and $_.PSObject.Properties.Name -contains 'path' -and $_.path -eq "/$($segments[0])" }) "grupo $($segments[0])"
     for ($index = 1; $index -lt $segments.Count; $index++) {
-        $parent = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups/$($parent.id)/children?search=$($segments[$index])&exact=true" | Where-Object path -eq "/$($segments[0..$index] -join '/')") "grupo $GroupPath"
+        $parent = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups/$($parent.id)/children?search=$($segments[$index])&exact=true" | Where-Object { $null -ne $_ -and $_.PSObject.Properties.Name -contains 'path' -and $_.path -eq "/$($segments[0..$index] -join '/')" }) "grupo $GroupPath"
     }
     $policyName = "environment-$EnvironmentId-group-$($segments[-1])"
     $policyType = 'group'
     $policyBody = @{ name = $policyName; type = 'group'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'; groupsClaim = 'groups'; groups = @(@{ id = $parent.id; path = $GroupPath }) }
 }
 
-$policies = @(Invoke-Api GET "$authzBase/policy?name=$([Uri]::EscapeDataString($policyName))") | Where-Object name -eq $policyName
-if ($policies.Count -eq 0) { $policy = Invoke-Api POST "$authzBase/policy/$policyType" $policyBody; Write-Output "Policy UMA criada: $policyName" }
+$policyResponse = @(Invoke-Api GET "$authzBase/policy")
+$policies = @($policyResponse.Where({ $null -ne $_ -and $_.PSObject.Properties.Name -contains 'name' -and $_.name -eq $policyName }))
+if ($policies.Count -eq 0) {
+    try { $policy = Invoke-Api POST "$authzBase/policy/$policyType" $policyBody; Write-Output "Policy UMA criada: $policyName" }
+    catch {
+        if ($_.Exception.Message -notmatch '409') { throw }
+        $policy = Find-One @((Invoke-Api GET "$authzBase/policy").Where({ $_.name -eq $policyName })) "policy $policyName"
+        Write-Output "Policy UMA já existe: $policyName"
+    }
+}
 else { $policy = Find-One $policies "policy $policyName"; Write-Output "Policy UMA já existe: $policyName" }
 
 $permissionName = "environment-$EnvironmentId-$($Scope.Replace(':','-'))"
-$permissions = @(Invoke-Api GET "$authzBase/permission?name=$([Uri]::EscapeDataString($permissionName))") | Where-Object name -eq $permissionName
+$permissionResponse = @(Invoke-Api GET "$authzBase/permission")
+$permissions = @($permissionResponse.Where({ $null -ne $_ -and $_.PSObject.Properties.Name -contains 'name' -and $_.name -eq $permissionName }))
 if ($permissions.Count -eq 0) {
-    Invoke-Api POST "$authzBase/permission/resource" @{
-        name = $permissionName; type = 'resource'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'
-        resources = @([string]$resource._id); scopes = @([string]$scopeRecord.id); policies = @([string]$policy.id)
-    } | Out-Null
-    Write-Output "Permission UMA criada: $permissionName"
+    try {
+        Invoke-Api POST "$authzBase/permission/resource" @{
+            name = $permissionName; type = 'resource'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'
+            resources = @([string]$resource._id); scopes = @([string]$scopeRecord.id); policies = @([string]$policy.id)
+        } | Out-Null
+        Write-Output "Permission UMA criada: $permissionName"
+    }
+    catch {
+        if ($_.Exception.Message -notmatch '409') { throw }
+        Write-Output "Permission UMA já existe: $permissionName"
+    }
 }
 else { Write-Output "Permission UMA já existe: $permissionName" }
 

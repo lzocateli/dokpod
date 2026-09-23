@@ -114,6 +114,12 @@ public sealed class AgentSessionNegotiatorTests
             RequestedFingerprint = certificateFingerprint;
             return ValueTask.FromResult(identity);
         }
+
+        public Task<bool> RevokeEnvironmentAsync(
+            Guid environmentId,
+            DateTimeOffset revokedAtUtc,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(false);
     }
 
     private sealed class FakeSessionStore : IAgentSessionStore

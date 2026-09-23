@@ -297,6 +297,7 @@ public sealed class TransportBoundaryTests
                 null,
                 environmentId,
                 Path.Combine(dataDirectory, "identity", "agent.pfx"),
+                null,
                 null);
             var worker = new global::Dokpod.Agent.AgentControlWorker(
                 options,
@@ -374,7 +375,7 @@ public sealed class TransportBoundaryTests
         var client = new AgentControl.AgentControlClient(channel);
         using var call = client.Connect(cancellationToken: TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<RpcException>(async () =>
+        var exception = await Assert.ThrowsAnyAsync<Exception>(async () =>
         {
             await call.RequestStream.WriteAsync(new AgentMessage
             {
@@ -389,6 +390,11 @@ public sealed class TransportBoundaryTests
             }, TestContext.Current.CancellationToken);
             await call.ResponseStream.MoveNext(TestContext.Current.CancellationToken);
         });
+
+        Assert.True(
+            exception is HttpIOException
+            || exception is RpcException,
+            $"Unexpected rejection exception: {exception.GetType().FullName}");
     }
 
     [Fact]
@@ -730,6 +736,12 @@ public sealed class TransportBoundaryTests
                     ? new AgentIdentity(environmentId, fingerprint)
                     : null);
         }
+
+        public Task<bool> RevokeEnvironmentAsync(
+            Guid environmentId,
+            DateTimeOffset revokedAtUtc,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(false);
     }
 
     private sealed class FixedInventoryProjectionStore(

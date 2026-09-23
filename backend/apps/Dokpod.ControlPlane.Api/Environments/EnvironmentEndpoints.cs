@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text;
+using Dokpod.ControlPlane.Application.Agents;
 using Dokpod.ControlPlane.Application.Authorization;
 using Dokpod.ControlPlane.Application.Environments;
 using Dokpod.Domain.Environments;
@@ -23,6 +24,8 @@ public static class EnvironmentEndpoints
         endpoints.MapGet("/api/v1/environments/{environmentId:guid}", GetAsync)
             .RequireAuthorization();
         endpoints.MapPost("/api/v1/environments", RegisterAsync)
+            .RequireAuthorization();
+        endpoints.MapPost("/api/v1/environments/{environmentId:guid}/agent-identity/revoke", RevokeAgentIdentityAsync)
             .RequireAuthorization();
     }
 
@@ -245,6 +248,68 @@ public static class EnvironmentEndpoints
         {
             environmentId = registration.EnvironmentId,
         });
+    }
+
+    private static async Task<IResult> RevokeAgentIdentityAsync(
+        Guid environmentId,
+        HttpContext context,
+        AgentIdentityRevocationService revocationService,
+        CancellationToken cancellationToken)
+    {
+        var subject = context.User.FindFirstValue("sub");
+        var accessToken = ExtractBearerToken(context.Request.Headers.Authorization);
+        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(accessToken))
+        {
+            return Problem(context,
+                StatusCodes.Status401Unauthorized,
+                "authentication_required",
+                "A autenticação do usuário é obrigatória.");
+        }
+
+        AgentIdentityRevocationResult result;
+        try
+        {
+            result = await revocationService.RevokeAsync(
+                environmentId,
+                AuthenticatedActor.FromSubject(subject),
+                accessToken,
+                GetCorrelationId(context),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ArgumentException)
+        {
+            return Problem(context,
+                StatusCodes.Status400BadRequest,
+                "invalid_environment_id",
+                "O identificador do ambiente é inválido.");
+        }
+        catch (InvalidOperationException)
+        {
+            return Problem(context,
+                StatusCodes.Status503ServiceUnavailable,
+                "persistence_unavailable",
+                "A identidade do agente está indisponível.");
+        }
+
+        if (!result.Allowed)
+        {
+            return Problem(context,
+                result.AuthorizationOutcome is AuthorizationDecisionOutcome.Indeterminate
+                    ? StatusCodes.Status503ServiceUnavailable
+                    : StatusCodes.Status403Forbidden,
+                result.FailureCode ?? "authorization_denied",
+                "A revogação da identidade não foi autorizada.");
+        }
+
+        if (!result.Revoked)
+        {
+            return Problem(context,
+                StatusCodes.Status404NotFound,
+                result.FailureCode ?? "agent_identity_not_found",
+                "A identidade do agente não foi encontrada.");
+        }
+
+        return Results.NoContent();
     }
 
     private static IResult Problem(HttpContext context, int status, string code, string detail) =>

@@ -13,6 +13,11 @@ public interface IAgentIdentityRegistry
     ValueTask<AgentIdentity?> FindByFingerprintAsync(
         string certificateFingerprint,
         CancellationToken cancellationToken);
+
+    Task<bool> RevokeEnvironmentAsync(
+        Guid environmentId,
+        DateTimeOffset revokedAtUtc,
+        CancellationToken cancellationToken);
 }
 
 public interface IAgentSessionStore

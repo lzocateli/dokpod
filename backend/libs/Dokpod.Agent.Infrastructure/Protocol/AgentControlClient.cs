@@ -18,7 +18,8 @@ public sealed class AgentControlClient : IAsyncDisposable
 
     public static AgentControlClient Create(
         Uri endpoint,
-        X509Certificate2 clientCertificate)
+        X509Certificate2 clientCertificate,
+        X509Certificate2? serverCaCertificate = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(clientCertificate);
@@ -29,6 +30,23 @@ public sealed class AgentControlClient : IAsyncDisposable
 
         var handler = new HttpClientHandler();
         handler.ClientCertificates.Add(clientCertificate);
+        if (serverCaCertificate is not null)
+        {
+            handler.ServerCertificateCustomValidationCallback = (_, certificate, _, _) =>
+            {
+                if (certificate is not X509Certificate2 serverCertificate)
+                {
+                    return false;
+                }
+
+                using var chain = new X509Chain();
+                chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+                chain.ChainPolicy.CustomTrustStore.Add(serverCaCertificate);
+                chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+                return chain.Build(serverCertificate);
+            };
+        }
+
         return new AgentControlClient(GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
         {
             HttpHandler = handler,

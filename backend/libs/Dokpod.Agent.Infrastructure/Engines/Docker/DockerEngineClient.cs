@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.IO.Pipes;
 using System.Text.Json;
 using Dokpod.Agent.Application.Engines;
 using Dokpod.Domain.Commands;
@@ -37,6 +38,39 @@ public sealed class DockerEngineClient(HttpClient httpClient) : IContainerEngine
                 catch
                 {
                     socket.Dispose();
+                    throw;
+                }
+            },
+        };
+
+        return new HttpClient(handler)
+        {
+            BaseAddress = new Uri("http://docker/", UriKind.Absolute),
+            Timeout = timeout,
+        };
+    }
+
+    public static HttpClient CreateNamedPipeClient(string pipeName, TimeSpan timeout)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            ConnectCallback = async (_, cancellationToken) =>
+            {
+                var pipe = new NamedPipeClientStream(
+                    ".",
+                    pipeName,
+                    PipeDirection.InOut,
+                    PipeOptions.Asynchronous);
+                try
+                {
+                    await pipe.ConnectAsync(cancellationToken);
+                    return pipe;
+                }
+                catch
+                {
+                    pipe.Dispose();
                     throw;
                 }
             },

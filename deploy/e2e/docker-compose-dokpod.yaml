@@ -23,12 +23,15 @@ services:
       dockerfile: backend/apps/Dokpod.ControlPlane.Api/Dockerfile
     image: dokpod-api:e2e
     user: "0:0"
+    ports:
+      - "17443:7443"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       DOKPOD_API_GRPC_PORT: 7443
       DOKPOD_API_HEALTH_PORT: 8080
       DOKPOD_API_CERTIFICATE_PATH: /certs/api.pfx
       DOKPOD_API_CERTIFICATE_PASSWORD: ${DOKPOD_E2E_API_CERTIFICATE_PASSWORD:-}
+      DOKPOD_API_CLIENT_CA_CERTIFICATE_PATH: /certs/pki/dokpod-dev-ca.crt
       Authentication__Keycloak__Authority: https://localhost:7443/realms/${KEYCLOAK_REALM:-dokpod}
       Authentication__Keycloak__BackchannelAuthority: http://keycloak:8080/realms/${KEYCLOAK_REALM:-dokpod}
       Authentication__Keycloak__Audience: dokpod-api
@@ -36,6 +39,7 @@ services:
       ConnectionStrings__ControlPlane: ${DOKPOD_CONTROLPLANE_CONNECTION:?Defina DOKPOD_CONTROLPLANE_CONNECTION no secret externo}
     volumes:
       - ${DOKPOD_E2E_API_CERTIFICATE_PATH:?Defina o caminho absoluto do certificado PFX da API}:/certs/api.pfx:ro
+      - ${DOKPOD_E2E_CERTIFICATE_DIRECTORY:?Defina a pasta externa de certificados do Dokpod}:/certs/pki:ro
     restart: "no"
     stop_grace_period: 20s
     networks:
@@ -85,6 +89,10 @@ services:
     image: dokpod-agent:e2e
     profiles:
       - agent
+    # O Docker Desktop não preserva ACLs de leitura do PFX montado do Windows
+    # para o UID não-root da imagem; o perfil de laboratório usa root somente
+    # para ler a identidade mTLS, mantendo mounts e engine explícitos.
+    user: "0:0"
     group_add:
       - "0"
     read_only: true
@@ -93,11 +101,21 @@ services:
       - /var/lib/dokpod-agent:rw,noexec,nosuid,size=16m,uid=1654,gid=1654,mode=0700
     volumes:
       - /var/run/docker.sock:/run/docker.sock
+      - ${DOKPOD_E2E_CERTIFICATE_DIRECTORY:?Defina a pasta externa de certificados do Dokpod}/dokpod-agent.pfx:/certs/pki/dokpod-agent.pfx:ro
+      - ${DOKPOD_E2E_CERTIFICATE_DIRECTORY:?Defina a pasta externa de certificados do Dokpod}/dokpod-dev-ca.crt:/certs/pki/dokpod-dev-ca.crt:ro
     environment:
-      DOKPOD_AGENT_RUN_ONCE: "true"
+      DOKPOD_AGENT_CONTROL_PLANE_ENDPOINT: https://api:7443
+      DOKPOD_AGENT_ENVIRONMENT_ID: ${DOKPOD_E2E_AGENT_ENVIRONMENT_ID:-}
+      DOKPOD_AGENT_CLIENT_CERTIFICATE_PATH: /certs/pki/dokpod-agent.pfx
+      DOKPOD_AGENT_SERVER_CA_CERTIFICATE_PATH: /certs/pki/dokpod-dev-ca.crt
       DOKPOD_AGENT_DATA_DIRECTORY: /var/lib/dokpod-agent
       DOKPOD_AGENT_DOCKER_SOCKET: /run/docker.sock
     restart: "no"
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      dokpod:
 
 networks:
   dokpod:
