@@ -2,7 +2,7 @@
 
 **Status:** approved  
 **Data de criação:** 2026-09-06  
-**Última atualização:** 2026-09-23
+**Última atualização:** 2026-09-25
 **Responsáveis:** equipe Dokpod  
 **Origem:** IA assistida  
 **Revisor humano:** Lincoln Zocateli  
@@ -72,12 +72,13 @@ Evidências:
 
 - `Dokpod.slnx`, gerenciamento central de pacotes e separação inicial entre domínio, aplicação, infraestrutura e contratos criados;
 - `build-backend-container`: build aprovado sem avisos ou erros;
-- `test-backend-container`: 21 testes aprovados;
+- `test-backend-container`: 183 testes aprovados; 23 integrações PostgreSQL
+    executadas separadamente contra a instância real e aprovadas sem skips;
 - Dockerfile multi-stage do agente e `.dockerignore` validados por build e smoke test;
 
 ### P-03: Identidade e cadastro de ambientes
 
-**Status:** in-progress  
+**Status:** in-progress
 **Responsável:** Lincoln Zocateli  
 **Dependências:** P-02
 
@@ -97,7 +98,11 @@ Evidências:
 - tela inicial Angular lista os ambientes autorizados, diferencia habilitados e desabilitados e permite cadastrar um ambiente previamente provisionado no Keycloak com antiforgery e tratamento de conflito;
 - stack E2E construída e saudável com web, BFF, API, PostgreSQL e Keycloak; acesso público pelo gateway retornou `200` e rota protegida sem sessão retornou `302` para login;
 - PKI E2E externa gerada em UserSecrets com CA local, certificado de servidor `serverAuth` e certificado de agente `clientAuth`; API, gateway e health foram validados com a nova cadeia;
-- jornada autenticada validada com usuário sintético, sessão BFF, catálogo e ambiente autorizado; autorização horizontal negativa e reconexão após revogação permanecem pendentes;
+- jornada autenticada validada com usuário sintético, sessão BFF, catálogo e ambiente autorizado;
+- autorização horizontal negativa validada para estado do ambiente, inventário e submissão de comando; a tentativa negada não criou registro persistente;
+- cookie antiforgery `__Host-Dokpod.Antiforgery` corrigido para `Path=/` e validado em browser real;
+- revogação via browser persistiu `revoked_at_utc`, auditou `environment.revoke`, encerrou o stream com `agent_session_fenced` e rejeitou reconexões com `agent_certificate_unknown`;
+- SignalR usa o base path `/dokpod`, negocia com antiforgery e exibe estado operacional; ambiente autorizado conecta e ambiente negado termina em `error` sem ingressar no grupo;
 
 ### P-04: Inventário reconciliável
 
@@ -129,6 +134,7 @@ Evidências:
 - teste PostgreSQL real comprova substituição atômica de snapshot, atualização de container existente e paginação por cursor;
 - teste de transporte mTLS comprova persistência do snapshot completo e entrega da invalidação SignalR;
 - agente publica snapshot inicial paginado logo após estabelecer a sessão e responde a solicitações de ressincronização; teste de transporte focado aprovado;
+- agente publica novo snapshot após cada comando terminal e o acumulador aceita snapshots sequenciais na mesma sessão; 5 testes focados do acumulador e o teste de transporte ponta a ponta foram aprovados;
 - stack E2E real persistiu revisão monotônica e 16 containers do Docker Desktop após corrigir o certificado de servidor para SAN `api`;
 - autorização HTTP horizontal permanece pendente;
 - carga nominal de 56 agentes, aproximadamente 1.120 containers e 30 usuários simultâneos por 30 minutos: **NOT RUN**.
@@ -187,13 +193,17 @@ Evidências:
 - testes da aplicação do control plane: 29 aprovados; testes da API e integrações: 76 aprovados, incluindo 18 testes de schema e persistência com PostgreSQL real;
 - UI Angular de lifecycle implementada em rota lazy por ambiente, com inventário paginado, idade da projeção, estados loading/vazio/erro/forbidden/indisponível, ações filtradas por scope e confirmação contextual de exclusão;
 - cliente OpenAPI gerado opera same-origin pelo BFF, obtém antiforgery antes de mutações, envia chave idempotente e acompanha o comando por polling cancelável até estado terminal;
-- testes frontend: 10 aprovados, cobrindo catálogo, cadastro, sessão expirada, fachada de lifecycle, erro `403`, refresh após resultado terminal e headers/corpo efetivamente enviados pelo cliente gerado; build Angular de produção aprovado;
-- fluxo black-box autenticado aprovado com 4 testes e 0 skips para sessão, catálogo, ambiente, inventário e visibilidade das ações; mutações, cenários negativos e screenshots permanecem pendentes.
+- testes frontend: 12 aprovados, cobrindo catálogo, cadastro, sessão expirada, fachada de lifecycle, erro `403`, realtime, refresh após resultado terminal e headers/corpo efetivamente enviados pelo cliente gerado; build Angular de produção aprovado;
+- fluxo black-box autenticado aprovou start, restart, stop e delete com confirmação sobre container sintético dedicado; os quatro comandos terminaram em `Succeeded`, o alvo foi removido sem volumes implícitos e quatro eventos de auditoria foram persistidos;
+- autorização horizontal black-box aprovada com `403` para estado, inventário e comando de outro ambiente, sem persistência da tentativa negada;
+- logout invalidou a sessão BFF, consulta autorizada de comando inexistente retornou `404` e recadastro do ambiente retornou `409` sem mutação;
+- screenshots finais da tela de inventário em 1440x900 e 390x844, além do estado forbidden mobile, foram verificadas sem sobreposição ou corte relevante; dados dos containers foram mascarados nos artifacts;
+- migration drift do laboratório corrigido: correlação de auditoria, particionamento global de comandos e agendamento de 133 partições aplicados; screenshots e demais cenários negativos permanecem pendentes.
 - duração de retenção e janela máxima de replay dos tombstones permanecem decisões operacionais humanas antes de produção; a garantia equivalente do journal no agente Windows será qualificada em P-07.
 
 ### P-06: Hardening e release candidata
 
-**Status:** not-started  
+**Status:** in-progress
 
 - threat model, SBOM, scans, imagens e pacote Windows assinados e runbooks;
 - backup/restore e política de atualização;
@@ -211,6 +221,14 @@ Evidências:
 - script de ciclo de vida do Windows Service documentado e validado em `DryRun`, incluindo inicialização atrasada e duas tentativas de recuperação; instalação real, conta dedicada, ACL, atualização e rollback permanecem pendentes;
 - Docker Windows/ named pipe, conta de usuário do processo e conexão gRPC foram validados; instalação como Windows Service, ACL dedicada, atualização e rollback permanecem pendentes;
 - Podman Linux e Windows Server ainda não foram qualificados.
+- Gitleaks `8.30.1` aprovou o histórico completo sem achados;
+- Trivy `0.72.0` gerou relatórios e SBOMs CycloneDX para API, BFF, web e agente: API/BFF/agente sem HIGH ou CRITICAL; web com 34 HIGH registrados e 0 CRITICAL; nenhum CRITICAL corrigível bloqueante;
+- backup completo do banco compartilhado foi restaurado em database temporária, validou 275 tabelas Dokpod e o realm Keycloak, e removeu dump/database temporários após sucesso;
+- assinatura, provenance, primeira execução remota do CI, threat model final e Windows Service em host limpo permanecem pendentes.
+- CI passou a aplicar migrations, executar integrações PostgreSQL sem skips,
+  testar/buildar Angular e chamar o mesmo script local de build/Trivy/SBOM para
+  as quatro imagens; workflow validado com actionlint, aguardando primeira
+  execução no GitHub para evidência formal.
 
 ### P-07: Qualificar capabilities adicionais
 
@@ -287,3 +305,12 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-24 | P-03 | in-progress | in-progress | usuário sintético, sessão BFF, catálogo e ambiente autorizado validados com Keycloak e UMA reais; autorização horizontal negativa e revogação E2E seguem pendentes | IA assistida |
 | 2026-09-24 | P-04 | in-progress | in-progress | agente passou a publicar snapshot inicial paginado; PostgreSQL convergiu para 16 containers reais pelo stream mTLS | IA assistida |
 | 2026-09-24 | P-05 | in-progress | in-progress | Playwright autenticado aprovou 4 testes sem skips para sessão, catálogo, ambiente, inventário e ações visíveis; mutações e screenshots seguem pendentes | IA assistida |
+| 2026-09-25 | P-03 | in-progress | in-progress | autorização horizontal negou estado, inventário e comando de outro ambiente sem persistência; cookie antiforgery `__Host-` corrigido e validado no browser | IA assistida |
+| 2026-09-25 | P-03 | in-progress | in-progress | revogação autenticada via browser persistiu estado, auditou intenção, aplicou fencing e bloqueou reconexão; identidade sintética foi restaurada após a prova | IA assistida |
+| 2026-09-25 | P-03 | in-progress | in-progress | SignalR corrigido para base path e antiforgery; browser conectou no ambiente autorizado e apresentou erro no ambiente negado | IA assistida |
+| 2026-09-25 | P-04 | in-progress | in-progress | snapshots sequenciais e publicação pós-comando implementados e cobertos por testes; projeção convergiu após mutações reais | IA assistida |
+| 2026-09-25 | P-05 | in-progress | in-progress | Playwright executou start, restart, stop e delete confirmados sobre alvo sintético; quatro comandos `Succeeded` e quatro eventos auditados | IA assistida |
+| 2026-09-25 | P-05 | in-progress | in-progress | screenshots desktop/mobile do inventário e forbidden mobile verificadas com dados sensíveis mascarados e sem defeitos relevantes | IA assistida |
+| 2026-09-25 | P-02 | in-progress | in-progress | suíte backend aprovou 183 testes; 23 integrações PostgreSQL reais e 12 testes frontend passaram sem skips | IA assistida |
+| 2026-09-25 | P-06 | not-started | in-progress | Gitleaks sem achados, quatro SBOMs/relatórios Trivy sem CRITICAL e backup/restore completo validados localmente | IA assistida |
+| 2026-09-25 | P-06 | in-progress | in-progress | script canônico de imagens e jobs CI para PostgreSQL, frontend e segurança adicionados; help, fluxo API e actionlint aprovados localmente | IA assistida |

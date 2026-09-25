@@ -1,12 +1,12 @@
 # Prontidão para Release do Dokpod
 
-**Data da avaliação:** 2026-09-23  
+**Data da avaliação:** 2026-09-25
 **Veredito:** **NO-GO**  
 **Escopo avaliado:** MVP Docker Linux, agente Linux em container e agente Windows self-contained  
-**Base:** branch `development`, commit `f013471`  
+**Base:** branch `development`, commit `b25cdb2`
 **Plano relacionado:** [MVP do Dokpod](plan/mvp.md)  
 
-**Atualização desta avaliação:** 2026-09-24, após E2E autenticado da stack candidata.  
+**Atualização desta avaliação:** 2026-09-25, após lifecycle e autorização horizontal E2E.
 
 ## Resumo executivo
 
@@ -14,11 +14,11 @@ O núcleo técnico do Dokpod está funcional em laboratório. A stack de control
 
 A entrega oficial ainda não está pronta. O bloqueio principal não é compilação: são gates de produto, segurança, carga, distribuição e operação que ainda não foram executados ou formalmente aceitos.
 
-Estimativa de maturidade:
+Resumo de maturidade:
 
-- Núcleo funcional: aproximadamente 80%.
-- Release Docker Linux: aproximadamente 60%.
-- Release multiplataforma de produção: abaixo de 40%.
+- núcleo funcional Docker Linux validado ponta a ponta em laboratório;
+- candidata de release ainda bloqueada por carga, supply chain assinada e operação;
+- matriz Windows/Podman ainda não qualificada para suporte estável.
 
 ## Evidências confirmadas
 
@@ -40,27 +40,41 @@ Estimativa de maturidade:
 - Usuário sintético, sessão BFF e autorização UMA provisionados pelo fluxo administrativo suportado, com credenciais somente em UserSecrets.
 - Agente Linux publicou snapshot inicial paginado pelo stream mTLS; a projeção PostgreSQL convergiu para 16 containers reais.
 - Suíte Playwright autenticada executada pela URL canônica do gateway: **4 testes aprovados, 0 skips**, cobrindo sessão, catálogo, ambiente, inventário e visibilidade das quatro ações autorizadas.
+- Lifecycle real executado pela UI sobre container sintético dedicado: start, restart, stop e delete confirmados, todos `Succeeded`, com remoção do alvo e auditoria persistida.
+- Autorização horizontal negada com `403` para estado, inventário e comando de outro ambiente; nenhuma tentativa negada foi persistida.
+- Cookie antiforgery `__Host-` validado com `Path=/`; migrations pendentes aplicadas e schema de comandos confirmado com chave global e 133 partições.
+- Revogação autenticada via browser validada: estado persistido, evento auditado, stream encerrado por fencing e reconexões do certificado revogado rejeitadas; identidade sintética restaurada após a prova.
+- SignalR validado pelo browser: conexão no ambiente autorizado e erro operacional no ambiente negado, com base path e antiforgery corretos.
+- Screenshots finais verificadas em desktop 1440x900, mobile 390x844 e forbidden mobile, com campos sensíveis mascarados e sem sobreposição ou corte relevante.
+- Suíte backend geral: **183 aprovados**; suíte PostgreSQL real: **23 aprovados, 0 skips**; frontend: **12 aprovados**.
+- Suíte E2E combinada: **8 aprovados, 0 skips** (revogação executada e aprovada separadamente por ser destrutiva), incluindo logout, `404` autorizado e `409` de cadastro duplicado.
+- Gitleaks `8.30.1` no histórico completo: **0 leaks**.
+- Trivy `0.72.0`: quatro relatórios e quatro SBOMs CycloneDX; API/BFF/agente com 0 HIGH/CRITICAL, web com 34 HIGH registrados e 0 CRITICAL; nenhum CRITICAL corrigível.
+- Backup/restore completo validado em database temporária, com 275 tabelas Dokpod e realm Keycloak presentes; artifacts temporários removidos após o exercício.
+- CI configurado para migrations/integrações PostgreSQL, test/build Angular e
+  build/Trivy/SBOM das quatro imagens pelo script local comum; actionlint e fluxo
+  representativo API aprovados, primeira execução remota ainda pendente.
 
 ## Matriz de gates
 
 | Gate | Estado | Evidência ou pendência |
 | --- | --- | --- |
 | Build .NET | PASS | Build completo sem warnings ou erros. |
-| Testes unitários e de aplicação | PASS PARCIAL | Recortes principais aprovados; falta consolidar suíte completa como gate de release. |
-| Transporte gRPC/mTLS | PASS PARCIAL | Transporte e agentes validados em laboratório; reconexão após revogação ponta a ponta ainda pendente. |
-| Docker Linux real | PASS PARCIAL | Unix socket, inventário e sessão validados; ciclo completo de quatro mutações precisa permanecer registrado em execução E2E final. |
-| PostgreSQL real | PASS PARCIAL | Migrations e vários testes reais aprovados; suíte não é executada integralmente em todo ciclo local. |
+| Testes unitários e de aplicação | PASS | 183 testes backend, 23 PostgreSQL reais e 12 frontend aprovados. |
+| Transporte gRPC/mTLS | PASS PARCIAL | Transporte, fencing e bloqueio de reconexão após revogação validados; compatibilidade N/N-1 permanece pendente. |
+| Docker Linux real | PASS PARCIAL | Unix socket, inventário, sessão e quatro mutações reais validados; carga e recuperação permanecem pendentes. |
+| PostgreSQL real | PASS | Migrations aplicadas, chave global e 133 partições confirmadas; 23 integrações reais aprovadas sem skips. |
 | Keycloak real | PASS PARCIAL | Login autenticado, grupo e UMA do ambiente validados; autorização horizontal negativa permanece pendente. |
-| E2E autenticado | PASS PARCIAL | 4 testes aprovados sem skips para sessão, catálogo, ambiente, inventário e ações visíveis; mutações e cenários negativos permanecem pendentes. |
-| Autorização horizontal | NOT RUN | Falta provar que usuário não acessa outro ambiente, inventário, comando ou SignalR. |
-| Revogação e reconexão | NOT RUN | Falta prova real PostgreSQL/Keycloak de bloqueio de reconexão após revogação. |
+| E2E autenticado | PASS PARCIAL | Sessão, catálogo, ambiente, inventário, lifecycle, revogação e screenshots aprovados; indisponibilidade permanece pendente. |
+| Autorização horizontal | PASS | Estado, inventário, comando e ingresso SignalR negados sem persistência ou associação ao grupo. |
+| Revogação e reconexão | PASS | Revogação via browser persistida e auditada; stream fenced e reconexões rejeitadas com certificado revogado. |
 | Carga nominal | NOT RUN | 56 agentes, 1.120 containers e 30 usuários por 30 minutos ainda não executados; deve rodar em VM real isolada. |
 | Carga de margem | NOT RUN | 100 agentes, 2.000 containers e 50 usuários ainda não executados. |
-| Angular produção | PASS PARCIAL | Build de produção e fluxo autenticado validados; screenshots responsivos ainda pendentes. |
-| Imagens de produção | NOT RUN | Falta gate automatizado para build, smoke, portas, mounts, usuário e health de todas as imagens. |
-| SBOM e vulnerabilidades | NOT RUN | Falta SBOM, Trivy e política formal de bloqueio/aceite. |
+| Angular produção | PASS | Build de produção, fluxo autenticado, realtime e screenshots desktop/mobile validados. |
+| Imagens de produção | PASS PARCIAL | API, BFF, web e agente construídos e saudáveis; job CI implementado, mas inspeções de usuário, portas e mounts ainda precisam ser automatizadas. |
+| SBOM e vulnerabilidades | PASS PARCIAL | Quatro SBOMs/scans locais sem CRITICAL e job CI implementado; web mantém 34 HIGH registrados e a primeira execução remota está pendente. |
 | Assinatura e provenance | NOT RUN | Imagens e pacote Windows ainda não possuem gate de assinatura/proveniência validado. |
-| Backup e restore | NOT RUN | Falta exercício real de backup e recuperação de PostgreSQL/Keycloak. |
+| Backup e restore | PASS | Dump completo restaurado e verificado em database temporária; cleanup concluído. |
 | Windows Service real | NOT RUN | Script e DryRun existem; instalação elevada, conta dedicada, ACL, update e rollback não foram executados. |
 | Podman Linux | NOT RUN | Rootless/rootful e diferenças Libpod não qualificados. |
 | Compatibilidade N/N-1 | NOT RUN | Falta teste com servidor/agente de versões consecutivas. |
@@ -70,29 +84,20 @@ Estimativa de maturidade:
 
 ### 1. Autenticação e autorização
 
-Implementar e executar jornadas autenticadas reais:
+Completar jornadas negativas ainda não executadas:
 
-- login e logout pelo browser;
-- sessão BFF sem tokens no browser;
-- cadastro de ambiente autorizado;
-- autorização horizontal entre dois ambientes;
-- inventário, comandos e SignalR protegidos por recurso;
-- CSRF;
-- Keycloak indisponível, token expirado e decisão indeterminada;
-- agente falso, identidade revogada e reconexão bloqueada.
+- expiração/renovação de sessão;
+- Keycloak indisponível, token expirado e decisão indeterminada no browser;
+- cadastro concorrente de ambiente;
+- indisponibilidade de PostgreSQL e recuperação da UI.
 
 ### 2. E2E funcional
 
-Adicionar uma suíte Playwright/black-box versionada cobrindo:
+Ampliar a suíte Playwright/black-box já versionada para cobrir:
 
-- login;
-- catálogo e entrada de ambiente;
-- inventário e idade da projeção;
-- start, stop, restart e delete;
-- confirmação de exclusão;
-- polling até estado terminal;
-- erros `403`, `404`, `409` e `503`;
-- screenshots dos estados relevantes.
+- sessão expirada;
+- indisponibilidade `503` de identidade e persistência;
+- recuperação após retorno das dependências.
 
 ### 3. Carga e recuperação
 
@@ -107,11 +112,9 @@ Executar e guardar os resultados para:
 
 ### 4. Hardening e cadeia de fornecimento
 
-Concluir:
+Concluir os itens ainda pendentes:
 
 - threat model revisado;
-- SBOM de imagens e pacote Windows;
-- scan de vulnerabilidades;
 - assinatura de imagens e pacote;
 - provenance verificável;
 - tags e digests reproduzíveis;
@@ -141,17 +144,14 @@ Publicar inicialmente somente a combinação comprovada. A recomendação atual 
 
 ## Sequência mínima recomendada
 
-1. Completar a jornada Playwright com mutações, confirmação de exclusão e cenários negativos.
-2. Provar autorização horizontal e revogação/reconexão com PostgreSQL real.
-3. Executar todos os testes PostgreSQL no pipeline.
-4. Executar carga nominal e carga de margem.
-5. Fechar threat model e revisão de segurança.
-6. Gerar SBOM, executar scans e registrar correções ou aceites formais.
-7. Automatizar build e smoke das imagens API, BFF, web e agente.
-8. Executar backup/restore.
-9. Validar Windows Service em host limpo.
-10. Atualizar matriz de suporte, runbooks e critérios de rollback.
-11. Fazer revisão humana final e decidir GO/NO-GO.
+1. Completar a jornada Playwright com indisponibilidade de dependências.
+2. Executar o novo CI no GitHub e adicionar inspeções de usuário, portas e mounts.
+3. Executar carga nominal e carga de margem.
+4. Fechar threat model e revisão de segurança.
+5. Assinar imagens e pacote Windows e gerar provenance verificável.
+6. Validar Windows Service em host limpo.
+7. Atualizar matriz de suporte, runbooks e critérios de rollback.
+8. Fazer revisão humana final e decidir GO/NO-GO.
 
 ## Riscos residuais
 
@@ -159,7 +159,6 @@ Publicar inicialmente somente a combinação comprovada. A recomendação atual 
 - A stack ainda depende de configuração externa de Keycloak, PostgreSQL e certificados.
 - O laboratório usa identidade técnica sintética; isso não substitui enrollment/provisionamento oficial.
 - A execução em console do agente Windows não substitui a validação como Windows Service.
-- O README raiz ainda comunica um estado mais antigo de scaffolding e deve ser alinhado antes da release.
 
 ## Critério de mudança do veredito
 

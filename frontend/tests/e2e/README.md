@@ -15,6 +15,15 @@ Variáveis:
 - `DOKPOD_E2E_USERNAME`: usuário sintético do Keycloak;
 - `DOKPOD_E2E_PASSWORD`: senha injetada somente em runtime;
 - `DOKPOD_E2E_ENVIRONMENT_ID`: UUID opcional para validar entrada, inventário e ações.
+- `DOKPOD_E2E_MUTATION_CONTAINER`: nome exato de um container sintético dedicado
+  que a suíte pode iniciar, reiniciar, parar e excluir. Sem essa variável, o
+  cenário destrutivo é ignorado.
+- `DOKPOD_E2E_DENIED_ENVIRONMENT_ID`: UUID de um segundo ambiente existente,
+  com resource UMA concedido exclusivamente a outro principal, usado para provar
+  negação horizontal em estado, inventário e comandos.
+- `DOKPOD_E2E_REVOKE_AGENT`: use `1` somente na execução isolada do cenário de
+  revogação. A operação encerra a sessão ativa e exige reprovisionar a identidade
+  sintética antes de reutilizar o laboratório.
 
 ## Execução containerizada
 
@@ -32,6 +41,8 @@ docker run --rm `
   --env DOKPOD_E2E_USERNAME `
   --env DOKPOD_E2E_PASSWORD `
   --env DOKPOD_E2E_ENVIRONMENT_ID `
+  --env DOKPOD_E2E_MUTATION_CONTAINER `
+  --env DOKPOD_E2E_DENIED_ENVIRONMENT_ID `
   lzocateli/playwright-e2e:0.1.0 `
   --base-url=https://localhost:7443/dokpod/ `
   /app/tests
@@ -43,6 +54,10 @@ containerizado use essa URL canônica sem substituir o header `Host`.
 
 O valor de `DOKPOD_E2E_PASSWORD` deve ser digitado ou injetado pelo mecanismo de secrets do ambiente. Não coloque a senha em linha de comando versionada, arquivo `.env` do repositório ou relatório.
 
+Execute `test_agent_identity_can_be_revoked` separadamente e somente no fim do
+ciclo de validação. Após comprovar o bloqueio de reconexão, restaure a identidade
+por um fluxo administrativo autorizado antes de iniciar novamente o agente.
+
 ## Cenários
 
 - sessão autenticada disponível no BFF;
@@ -50,7 +65,11 @@ O valor de `DOKPOD_E2E_PASSWORD` deve ser digitado ou injetado pelo mecanismo de
 - ambiente autorizado consultável por API e UI;
 - tela de containers exibindo ações autorizadas.
 
-Os cenários que dependem de `DOKPOD_E2E_ENVIRONMENT_ID` são marcados como `skipped` quando o UUID não é fornecido. Para o gate de release, o UUID e o usuário devem ser provisionados no ambiente de homologação e o resultado não pode conter skips.
+Os cenários que dependem de `DOKPOD_E2E_ENVIRONMENT_ID` são marcados como
+`skipped` quando o UUID não é fornecido. O cenário de mutação também exige um
+container descartável criado exclusivamente para o teste; nunca informe um
+container de aplicação ou infraestrutura. Para o gate de release, UUID, usuário
+e alvo sintético devem estar provisionados e o resultado não pode conter skips.
 
 ## Relatórios
 

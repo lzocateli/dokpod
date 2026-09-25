@@ -5,6 +5,7 @@
       <p class="eyebrow">INVENTÁRIO / {{ environmentId() }}</p>
       <h1>{{ facade.environment()?.name ?? 'Containers' }}</h1>
       <p class="host">{{ facade.environment()?.host ?? 'Consultando ambiente…' }}</p>
+      <p class="realtime-status" [attr.data-state]="realtime.status()">Tempo real: {{ realtime.status() }}</p>
     </div>
     <button type="button" [disabled]="facade.loading()" (click)="facade.load(environmentId())">Atualizar</button>
   </header>

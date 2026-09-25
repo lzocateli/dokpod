@@ -1,9 +1,10 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import type { ContainerAction } from '../../data-access/control-plane-api.service';
 import type { ContainerInventory } from '../../data-access/generated/control-plane';
+import { ControlPlaneRealtimeService } from '../../core/control-plane-realtime.service';
 import { ContainerLifecycleFacade } from './container-lifecycle.facade';
 
 const actionScopes = {
@@ -23,16 +24,29 @@ const actionScopes = {
 export class ContainerListPage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly realtime = inject(ControlPlaneRealtimeService);
   protected readonly facade = inject(ContainerLifecycleFacade);
   protected readonly environmentId = signal('');
   protected readonly pendingDelete = signal<ContainerInventory | null>(null);
   protected readonly stale = computed(() => this.facade.ageSeconds() >= 60);
+
+  constructor() {
+    effect(() => {
+      const notification = this.realtime.inventoryChanged();
+      const environmentId = this.environmentId();
+      if (notification?.environmentId === environmentId) {
+        void this.facade.load(environmentId);
+      }
+    });
+    this.destroyRef.onDestroy(() => void this.realtime.disconnect());
+  }
 
   ngOnInit(): void {
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       const environmentId = params.get('environmentId') ?? '';
       this.environmentId.set(environmentId);
       void this.facade.load(environmentId);
+      void this.realtime.joinEnvironment(environmentId).catch(() => undefined);
     });
   }
 

@@ -6,6 +6,7 @@ command -v docker >/dev/null 2>&1 || {
   exit 1
 }
 
-git diff --cached --no-ext-diff --no-textconv | docker run --rm -i --read-only \
+git diff --cached --no-ext-diff --no-textconv | MSYS_NO_PATHCONV=1 docker run --rm -i --read-only \
+  --volume "$(git rev-parse --show-toplevel)/.gitleaks.toml:/gitleaks.toml:ro" \
   lzocateli/gitleaks:8.30.1 \
-  stdin --redact
+  stdin --redact --config /gitleaks.toml

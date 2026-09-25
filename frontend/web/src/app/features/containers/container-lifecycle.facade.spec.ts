@@ -82,11 +82,7 @@ describe('ContainerLifecycleFacade', () => {
   });
 
   it('traduz negação de autorização em estado operacional', async () => {
-    api.getEnvironment.mockRejectedValue({
-      status: 403,
-      title: 'Forbidden',
-      detail: 'Denied',
-    });
+    api.getEnvironment.mockRejectedValue({ status: 403 });
     const facade = TestBed.inject(ContainerLifecycleFacade);
 
     await facade.load(environment.environmentId);

@@ -1,0 +1,40 @@
+title = "Dokpod secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "dokpod-connection-string-credential"
+description = "Detects hardcoded credentials in connection strings"
+regex = '''(?i)(?:password|pwd|passwd|secret|access[_ -]?key)\s*=\s*(?:'[^']+'|"[^"]+"|[^;\r\n]+)'''
+keywords = ["password", "pwd", "passwd", "secret", "access_key"]
+tags = ["secret", "connection-string", "dokpod"]
+
+[[rules]]
+id = "dokpod-basic-auth-header"
+description = "Detects hardcoded Basic authentication headers"
+regex = '''(?i)\bBasic\s+[A-Za-z0-9+/]{20,}={0,2}'''
+keywords = ["basic"]
+tags = ["secret", "authorization", "dokpod"]
+
+[[rules]]
+id = "dokpod-bearer-auth-header"
+description = "Detects hardcoded Bearer authentication headers"
+regex = '''(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{20,}'''
+keywords = ["bearer"]
+tags = ["secret", "authorization", "dokpod"]
+
+[[rules]]
+id = "dokpod-docker-auth"
+description = "Detects encoded Docker registry credentials"
+regex = '''(?i)"auth"\s*:\s*"[A-Za-z0-9+/=]{20,}"'''
+keywords = ["auth"]
+tags = ["secret", "docker", "dokpod"]
+
+[[allowlists]]
+description = "Allow only GitHub Actions secret references, never their values"
+regexes = ['''\$\{\{\s*secrets\.[A-Za-z0-9_]+\s*\}\}''']
+
+[[allowlists]]
+description = "Allow documented non-secret placeholders"
+regexes = ['''(?i)(?:CHANGE_ME|REPLACE_ME|YOUR_[A-Z0-9_]+|<your-[^>]+>)''']

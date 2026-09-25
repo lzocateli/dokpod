@@ -8,6 +8,9 @@
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 0.35rem; font-family: var(--dk-font-display); font-size: clamp(2.5rem, 6vw, 5rem); line-height: 1; }
 .host, .identity p { margin-bottom: 0; color: var(--dk-color-muted); }
+.realtime-status { margin: 0.5rem 0 0; color: var(--dk-color-muted); font-family: var(--dk-font-mono); font-size: 0.72rem; }
+.realtime-status[data-state="connected"] { color: var(--dk-color-accent-strong); }
+.realtime-status[data-state="error"] { color: #a4233e; }
 button { min-height: 2.5rem; border: 1px solid var(--dk-color-ink); border-radius: 0.2rem; padding: 0.55rem 0.85rem; background: transparent; color: inherit; cursor: pointer; font-weight: 700; }
 button:hover:not(:disabled) { background: var(--dk-color-ink); color: var(--dk-color-paper); }
 button:disabled { cursor: wait; opacity: 0.45; }

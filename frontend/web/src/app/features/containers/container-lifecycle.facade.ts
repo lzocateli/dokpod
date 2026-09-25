@@ -168,10 +168,11 @@ function delay(milliseconds: number): Promise<void> {
 
 function toInventoryError(error: unknown): InventoryError {
   const problem = toProblemDetails(error);
-  if (problem?.status === 403) {
+  const status = toStatus(error) ?? problem?.status ?? null;
+  if (status === 403) {
     return { status: 403, title: 'Acesso negado', detail: 'Você não pode consultar este ambiente.' };
   }
-  if (problem?.status === 503) {
+  if (status === 503) {
     return {
       status: 503,
       title: 'Plano de controle indisponível',
@@ -180,10 +181,19 @@ function toInventoryError(error: unknown): InventoryError {
   }
 
   return {
-    status: problem?.status ?? null,
+    status,
     title: problem?.title ?? 'Falha ao carregar inventário',
     detail: problem?.detail ?? 'Não foi possível consultar os containers deste ambiente.',
   };
+}
+
+function toStatus(error: unknown): number | null {
+  if (typeof error !== 'object' || error === null) {
+    return null;
+  }
+
+  const status = (error as { status?: unknown }).status;
+  return typeof status === 'number' ? status : null;
 }
 
 function toProblemDetails(error: unknown): ProblemDetails | null {

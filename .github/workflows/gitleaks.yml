@@ -34,5 +34,6 @@ jobs:
           set -o pipefail
           git log --all --full-history -p -- |
             docker run --rm -i --read-only \
+              --volume "$GITHUB_WORKSPACE/.gitleaks.toml:/gitleaks.toml:ro" \
               lzocateli/gitleaks:8.30.1 \
-              stdin --redact
+              stdin --redact --config /gitleaks.toml

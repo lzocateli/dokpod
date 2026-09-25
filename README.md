@@ -14,7 +14,16 @@ Segurança essencial, autenticação, autorização básica, mTLS, correções d
 
 ## Estado
 
-A arquitetura inicial foi aceita em 2026-09-06. O projeto está em fase de provas técnicas e scaffolding; ainda não há aplicação executável nem promessa de compatibilidade de produção.
+A arquitetura inicial foi aceita em 2026-09-06. Existe uma candidata de MVP
+executável em laboratório com web Angular, BFF, API, PostgreSQL, Keycloak e
+agente Docker Linux. Inventário, autorização por ambiente, realtime, start,
+restart, stop, delete, auditoria, revogação e reconciliação foram validados ponta
+a ponta com dados sintéticos.
+
+O projeto ainda não declara compatibilidade de produção. Carga nominal/margem,
+assinatura e provenance, qualificação do Windows Service em host limpo, Podman e
+revisão humana final permanecem gates bloqueantes. Consulte a
+[prontidão para release](docs/release-readiness.md) para o veredito atual.
 
 ## Objetivos do MVP
 
@@ -108,20 +117,17 @@ flowchart LR
 
 O inventário persistido é uma projeção reconstruível. O engine local é a fonte de verdade do estado dos containers. O servidor envia comandos de domínio versionados; o agente não expõe um proxy irrestrito do socket.
 
-## Estrutura alvo
+## Estrutura do monorepo
 
 ```text
 backend/
-  apps/api/                  # plano de controle HTTP, gRPC e SignalR
-  apps/bff/                  # sessão OIDC confidencial e proteção de tokens
-  apps/agent/                # host comum do agente Linux/Windows
-  libs/domain/               # invariantes compartilhadas sem infraestrutura
-  libs/control-plane/        # aplicação e infraestrutura do plano de controle
-  libs/agent/                # aplicação e infraestrutura do agente
+  apps/Dokpod.ControlPlane.Api/ # plano de controle HTTP, gRPC e SignalR
+  apps/Dokpod.Bff/              # sessão OIDC confidencial e proteção de tokens
+  apps/Dokpod.Agent/            # host comum do agente Linux/Windows
+  libs/                         # domínio, aplicação, contratos e infraestrutura
   tests/
 frontend/
   web/                       # aplicação Angular 22
-  libs/                      # bibliotecas frontend reutilizáveis
   tests/
 contracts/
   openapi/                   # API pública do plano de controle
@@ -166,4 +172,8 @@ tools/scripts/               # automação global de infraestrutura e manutenç�
 
 ## Próxima etapa
 
-Executar as provas técnicas descritas no [parecer de viabilidade](docs/viabilidade.md#provas-técnicas-obrigatórias) e iniciar o scaffolding conforme a arquitetura aceita. Docker Linux, Podman Linux e Docker Windows só recebem suporte publicado após seus respectivos gates.
+Executar os gates externos restantes da
+[prontidão para release](docs/release-readiness.md): carga em VM isolada,
+assinatura/provenance, Windows Service em host limpo, matriz Podman e revisão
+humana GO/NO-GO. Docker Linux, Podman Linux e Docker Windows só recebem suporte
+publicado após seus respectivos gates.

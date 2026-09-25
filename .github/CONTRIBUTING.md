@@ -5,8 +5,13 @@
 1. Leia o [README](../README.md) e os documentos da área afetada.
 2. Procure issue, ADR e plano relacionados.
 3. Para mudança relevante, registre resultado observável, não escopo e riscos.
-4. Nunca inclua tokens, chaves, certificados privados, dados reais de infraestrutura ou logs sensíveis.
-5. Para persistência e migrations, siga as [convenções de EF Core](EFCORE.md); secrets permanecem no provider externo de User Secrets.
+4. Nunca inclua secrets em nenhuma parte do código ou configuração, inclusive
+   workflows, testes, documentação, exemplos, scripts e connection strings.
+   Tokens, chaves, certificados privados, dados reais de infraestrutura e logs
+   sensíveis são sempre proibidos.
+5. Para persistência e migrations, siga as [convenções de EF Core](EFCORE.md);
+   secrets locais permanecem no provider externo de User Secrets e secrets de CI
+   permanecem nos Environments do GitHub.
 6. Instale o hook obrigatório de detecção de secrets em cada clone:
 
    ```powershell
@@ -15,6 +20,8 @@
    ```
 
    Consulte a [política de detecção de secrets](SECRET-SCANNING.md).
+   O hook usa `.gitleaks.toml`; não o substitua por uma execução sem a
+   configuração versionada.
 
 ## Licenciamento de contribuições
 

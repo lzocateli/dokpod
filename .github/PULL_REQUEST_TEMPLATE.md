@@ -48,6 +48,10 @@ Comandos e resultados:
 - [ ] Idempotência, timeout e reconexão foram avaliados
 - [ ] Nenhum socket foi exposto nem proxy genérico adicionado
 - [ ] Nenhum secret ou dado sensível foi incluído
+- [ ] Nenhuma connection string, senha de teste ou credencial foi incluída em
+	código, testes, documentação, scripts ou workflows
+- [ ] Secrets necessários ao CI foram criados no Environment do GitHub, e não
+	commitados no repositório
 - [ ] Dependências possuem licença e versão verificadas
 - [ ] Testes de carga seguem os critérios do Dokpod quando o caminho crítico foi alterado
 - [ ] Rollout, rollback e observabilidade estão documentados

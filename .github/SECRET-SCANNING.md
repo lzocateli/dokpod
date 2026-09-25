@@ -5,6 +5,35 @@ diff staged e o check obrigatório `Gitleaks / Full History` para todo o histór
 Git alcançável no runner. Ambos executam exclusivamente a imagem fixada
 `lzocateli/gitleaks:8.30.1` por Docker.
 
+A configuração versionada em `.gitleaks.toml` herda o catálogo padrão do
+Gitleaks e adiciona regras Dokpod para credenciais em connection strings,
+headers Basic/Bearer e credenciais codificadas de Docker. Não existe uma regra
+que detecte literalmente todos os secrets sem falsos positivos: a prática é
+combinar o catálogo padrão, regras locais estreitas, push protection, revisão e
+rotação. O hook local e o workflow devem sempre usar essa configuração; uma
+referência a `${{ secrets.NOME }}` não é o valor do secret e pode permanecer no
+workflow.
+
+## Regra de tolerância zero
+
+Nenhum secret pode ser commitado em qualquer parte do repositório: código,
+testes, documentação, exemplos, scripts, imagens, manifests ou workflows do
+GitHub. Isso inclui connection strings, senhas de teste, tokens, chaves,
+certificados privados e valores que apenas “parecem” credenciais.
+
+Workflows usam secrets de um Environment do GitHub, nunca valores literais no
+YAML. No CI do backend, configure o Environment `ci` com:
+
+- `DOKPOD_CI_CONTROLPLANE_CONNECTION`;
+- `DOKPOD_CI_TEST_POSTGRES_CONNECTION`;
+- `DOKPOD_CI_POSTGRES_PASSWORD`.
+
+Crie-os em **Settings > Environments > ci > Environment secrets**. O valor é
+digitado diretamente no GitHub e não deve ser copiado para o repositório, logs,
+issues, pull requests ou mensagens. Pull requests usam apenas valores efêmeros
+não secretos, pois secrets de ambientes protegidos não são disponibilizados a
+PRs.
+
 ## Instalação local obrigatória
 
 Na raiz de cada clone, com PowerShell 7, Git e Docker disponíveis:
@@ -36,6 +65,12 @@ minimalista e não precisa conter o executável `git`.
 3. Remova o secret da árvore e, quando necessário, reconstrua o histórico.
 4. Reexecute o hook e o check de histórico completo.
 5. Trate falso positivo somente por exceção mínima, documentada e revisada.
+
+Se um achado estiver em workflow ou configuração de CI, interrompa a execução,
+revogue o valor se ele for real, substitua-o por uma referência a
+`${{ secrets.NOME_DO_SECRET }}` e confirme que o valor foi criado no Environment
+correto do GitHub. Não use `${{ secrets.* }}` como justificativa para commitar o
+valor real em outro arquivo.
 
 Não adicione allowlists automáticas nem exceções amplas. A mera remoção do
 arquivo no commit atual não elimina um secret já presente no histórico.

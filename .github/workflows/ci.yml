@@ -18,26 +18,112 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
+    environment: ci
     permissions:
       contents: read
+    env:
+      DOKPOD_CONTROLPLANE_CONNECTION: ${{ github.event_name == 'pull_request' && 'Host=postgres;Port=0000;Database=namedb;Username=userdb;Search Path=dokpod;Command Timeout=300' || secrets.DOKPOD_CI_CONTROLPLANE_CONNECTION }}
+      DOKPOD_TEST_POSTGRES_CONNECTION: ${{ github.event_name == 'pull_request' && 'Host=postgres;Port=0000;Database=namedb;Username=userdb;Search Path=dokpod;Command Timeout=300' || secrets.DOKPOD_CI_TEST_POSTGRES_CONNECTION }}
     container:
       image: lzocateli/dotnet-sdk:10.0.400-noble
       options: --user 0
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_DB: keycloak
+          POSTGRES_USER: keycloak
+          POSTGRES_HOST_AUTH_METHOD: ${{ github.event_name == 'pull_request' && 'trust' || 'scram-sha-256' }}
+          POSTGRES_PASSWORD: ${{ github.event_name == 'pull_request' && 'ci' || secrets.DOKPOD_CI_POSTGRES_PASSWORD }}
+        options: >-
+          --health-cmd "pg_isready -U keycloak -d keycloak"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Test backend
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Apply database migrations
+        run: >-
+          dotnet ef database update
+          --project backend/libs/Dokpod.ControlPlane.Infrastructure/Dokpod.ControlPlane.Infrastructure.csproj
+          --startup-project backend/apps/Dokpod.ControlPlane.Api/Dokpod.ControlPlane.Api.csproj
+          --configuration Release
+
+      - name: Test backend and PostgreSQL integrations
         run: dotnet test Dokpod.slnx --configuration Release --verbosity minimal
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    container:
+      image: lzocateli/angular-cli:22.1.0-node24.15.0-bookworm
+      options: --user 0
+    defaults:
+      run:
+        working-directory: frontend/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate and verify API client
+        run: |
+          npm run generate:api
+          git diff --exit-code
+
+      - name: Test frontend
+        run: npm test -- --watch=false
+
+      - name: Build frontend
+        run: npm run build -- --configuration production --base-href /dokpod/
+
+  images:
+    name: Images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build, scan and generate SBOMs
+        shell: pwsh
+        run: ./tools/scripts/validate-release-images.ps1 -Image all -Tag ci
+
+      - name: Upload security artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: image-security
+          path: artifacts/security-local/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   result:
     name: Result
     if: ${{ always() }}
     needs:
       - backend
+      - frontend
+      - images
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
@@ -45,9 +131,19 @@ jobs:
       - name: Evaluate required jobs
         env:
           BACKEND_RESULT: ${{ needs.backend.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          IMAGES_RESULT: ${{ needs.images.result }}
         shell: bash
         run: |
           if [[ "$BACKEND_RESULT" != "success" ]]; then
             echo "Backend terminou com: $BACKEND_RESULT"
+            exit 1
+          fi
+          if [[ "$IMAGES_RESULT" != "success" ]]; then
+            echo "Images terminou com: $IMAGES_RESULT"
+            exit 1
+          fi
+          if [[ "$FRONTEND_RESULT" != "success" ]]; then
+            echo "Frontend terminou com: $FRONTEND_RESULT"
             exit 1
           fi

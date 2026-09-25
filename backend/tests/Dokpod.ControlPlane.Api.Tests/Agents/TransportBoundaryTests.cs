@@ -317,11 +317,13 @@ public sealed class TransportBoundaryTests
                 cancellation.Token);
 
             await commandStore.TerminalResult.Task.WaitAsync(cancellation.Token);
+            await inventoryStore.SecondSnapshot.Task.WaitAsync(cancellation.Token);
 
             Assert.Equal(1, engine.ExecutionCount);
             Assert.NotNull(inventoryStore.Snapshot);
             Assert.Equal(environmentId, inventoryStore.Snapshot.EnvironmentId);
             Assert.True(inventoryStore.Snapshot.Revision > 0);
+            Assert.True(inventoryStore.SnapshotReplacementCount >= 2);
             Assert.Collection(
                 commandStore.Updates,
                 update => Assert.Equal(ControlPlaneCommandState.Dispatched, update.State),
@@ -757,6 +759,8 @@ public sealed class TransportBoundaryTests
     {
         public Guid? EnvironmentId { get; private set; }
         public Dokpod.Domain.Inventory.InventorySnapshot? Snapshot { get; private set; }
+        public int SnapshotReplacementCount { get; private set; }
+        public TaskCompletionSource SecondSnapshot { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task<Dokpod.Domain.Inventory.InventoryReconciliationResult> ApplyDeltaAsync(
             Guid environmentId,
@@ -778,6 +782,11 @@ public sealed class TransportBoundaryTests
             cancellationToken.ThrowIfCancellationRequested();
             EnvironmentId = snapshot.EnvironmentId;
             Snapshot = snapshot;
+            SnapshotReplacementCount++;
+            if (SnapshotReplacementCount >= 2)
+            {
+                SecondSnapshot.TrySetResult();
+            }
             return Task.FromResult(new Dokpod.Domain.Inventory.InventoryReconciliationResult(
                 snapshot,
                 outcome,

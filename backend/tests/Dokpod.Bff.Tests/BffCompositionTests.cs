@@ -1,5 +1,6 @@
 using Dokpod.Bff;
 using Dokpod.Bff.Authentication;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.RateLimiting;
@@ -69,6 +70,7 @@ public sealed class BffCompositionTests
             .Get(OpenIdConnectDefaults.AuthenticationScheme);
         var cookie = provider.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
             .Get(CookieAuthenticationDefaults.AuthenticationScheme);
+        var antiforgery = provider.GetRequiredService<IOptions<AntiforgeryOptions>>().Value;
 
         Assert.True(oidc.UsePkce);
         Assert.False(oidc.RequireHttpsMetadata);
@@ -77,5 +79,7 @@ public sealed class BffCompositionTests
         Assert.Equal(typeof(CookieTokenRefreshEvents), cookie.EventsType);
         Assert.IsType<ServerSideTicketStore>(cookie.SessionStore);
         Assert.Contains("__Host-Dokpod.Session", cookie.Cookie.Name);
+        Assert.Equal("__Host-Dokpod.Antiforgery", antiforgery.Cookie.Name);
+        Assert.Equal("/", antiforgery.Cookie.Path);
     }
 }

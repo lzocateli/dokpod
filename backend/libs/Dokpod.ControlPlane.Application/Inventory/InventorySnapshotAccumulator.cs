@@ -37,6 +37,11 @@ public sealed class InventorySnapshotAccumulator(
     {
         ArgumentNullException.ThrowIfNull(page);
 
+        if (completed && page.PageNumber == 0)
+        {
+            Reset();
+        }
+
         if (completed || page.PageNumber != nextPageNumber || page.PageNumber >= maximumPages)
         {
             return Invalid("snapshot_page_out_of_order");
@@ -91,6 +96,15 @@ public sealed class InventorySnapshotAccumulator(
             inventoryRevision,
             new ReadOnlyDictionary<string, ContainerInventory>(containers));
         return new InventorySnapshotPageResult(InventorySnapshotPageOutcome.Completed, snapshot);
+    }
+
+    private void Reset()
+    {
+        containers.Clear();
+        snapshotId = null;
+        inventoryRevision = 0;
+        nextPageNumber = 0;
+        completed = false;
     }
 
     private static InventorySnapshotPageResult Invalid(string failureCode) =>

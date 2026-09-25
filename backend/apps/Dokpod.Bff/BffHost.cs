@@ -81,6 +81,7 @@ public static class BffHost
         builder.Services.AddAntiforgery(options =>
         {
             options.Cookie.Name = runtime.AntiforgeryCookieName;
+            options.Cookie.Path = "/";
             options.Cookie.HttpOnly = true;
             options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
                 ? CookieSecurePolicy.SameAsRequest

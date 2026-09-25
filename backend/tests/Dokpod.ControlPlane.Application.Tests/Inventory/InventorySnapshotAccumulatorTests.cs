@@ -97,6 +97,31 @@ public sealed class InventorySnapshotAccumulatorTests
         Assert.Single(valid.Snapshot!.Containers);
     }
 
+    [Fact]
+    public void AddPage_AfterCompletedSnapshot_StartsNextSnapshot()
+    {
+        var accumulator = new InventorySnapshotAccumulator(Guid.NewGuid());
+        var first = accumulator.AddPage(new InventorySnapshotPage(
+            Guid.NewGuid().ToString("D"),
+            1,
+            0,
+            true,
+            [CreateContainer("container-1")]));
+
+        var second = accumulator.AddPage(new InventorySnapshotPage(
+            Guid.NewGuid().ToString("D"),
+            2,
+            0,
+            true,
+            [CreateContainer("container-2")]));
+
+        Assert.Equal(InventorySnapshotPageOutcome.Completed, first.Outcome);
+        Assert.Equal(InventorySnapshotPageOutcome.Completed, second.Outcome);
+        Assert.Equal(2UL, second.Snapshot!.Revision);
+        Assert.DoesNotContain("container-1", second.Snapshot.Containers);
+        Assert.Contains("container-2", second.Snapshot.Containers);
+    }
+
     private static ContainerInventory CreateContainer(string containerId) =>
         new(containerId, containerId, "fixture:latest", "Running", "revision-1", DateTimeOffset.UtcNow);
 }

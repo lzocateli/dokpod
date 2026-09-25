@@ -20,7 +20,11 @@ applyTo: "backend/**, frontend/**, contracts/**, deploy/**"
 - Proteja contra replay com journal durável, ID/hash imutável, deadline, alvo por ID/revisão e fencing.
 - Proteja contra SSRF, redirects, confused deputy, command injection e autorização horizontal.
 - Faça escaping de nomes, labels e logs; nunca os trate como HTML confiável.
-- Secrets vêm de provider seguro ou arquivo montado, nunca de Git ou imagem.
+- Secrets vêm de provider seguro, secret de Environment do GitHub ou arquivo montado;
+	nunca de Git, workflow, imagem, documentação, exemplo, log ou argumento persistido.
+- A proibição é absoluta: não versione secrets em nenhuma parte do código, incluindo
+	connection strings, arquivos de CI/CD, manifests, testes e scripts. Valores de teste
+	só podem ser sintéticos, efêmeros e claramente não secretos.
 - Logs e traces usam IDs técnicos e redaction; não coletam env vars ou logs integrais por padrão.
 - Dependências exigem licença permissiva, manutenção, vulnerabilidades e proveniência verificadas.
 - Releases do agente são aceitas somente após verificar assinatura, provenance, emissor e digest não revogado.

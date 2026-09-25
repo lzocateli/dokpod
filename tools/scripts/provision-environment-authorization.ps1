@@ -177,7 +177,7 @@ if ([string]::IsNullOrWhiteSpace($script:accessToken)) { throw 'Keycloak não re
 $apiClient = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/clients?clientId=$clientId") "client $clientId"
 $authzBase = "$BaseUrl/admin/realms/$Realm/clients/$($apiClient.id)/authz/resource-server"
 $scopeRecord = Find-One (Invoke-Api GET "$authzBase/scope?name=$([Uri]::EscapeDataString($Scope))&exact=true") "scope $Scope"
-$resourceResponse = @(Invoke-Api GET "$authzBase/resource?name=$([Uri]::EscapeDataString($resourceName))&exactName=true")
+$resourceResponse = @(@(Invoke-Api GET "$authzBase/resource?name=$([Uri]::EscapeDataString($resourceName))&exactName=true") | ForEach-Object { $_ })
 $resourceMatches = @($resourceResponse | Where-Object { $null -ne $_ })
 if ($resourceMatches.Count -eq 0) {
     $resource = Invoke-Api POST "$authzBase/resource" @{
@@ -186,9 +186,24 @@ if ($resourceMatches.Count -eq 0) {
         scopes = @(@{ id = $scopeRecord.id; name = $Scope })
         ownerManagedAccess = $false
     }
+    $resourceId = if ($resource.PSObject.Properties.Name -contains 'id' -and $resource.id) { $resource.id } else { $resource._id }
+    $resource = Invoke-Api GET "$authzBase/resource/$resourceId"
     Write-Output "Recurso UMA criado: $resourceName"
 }
-else { $resource = Find-One $resourceMatches "recurso $resourceName"; Write-Output "Recurso UMA já existe: $resourceName" }
+else {
+    $resource = Find-One $resourceMatches "recurso $resourceName"
+    $resourceId = if ($resource.PSObject.Properties.Name -contains 'id' -and $resource.id) { $resource.id } else { $resource._id }
+    $resource = Invoke-Api GET "$authzBase/resource/$resourceId"
+    $resourceScopes = @(@($resource.scopes) | ForEach-Object { $_ })
+    if ($resourceScopes.id -notcontains $scopeRecord.id) {
+        $resource.scopes = @($resourceScopes + @(@{ id = $scopeRecord.id; name = $Scope }))
+        Invoke-Api PUT "$authzBase/resource/$resourceId" $resource | Out-Null
+        Write-Output "Recurso UMA atualizado com scope ${Scope}: $resourceName"
+    }
+    else {
+        Write-Output "Recurso UMA já existe: $resourceName"
+    }
+}
 
 if ($OwnerUsername) {
     $user = Find-One ((Invoke-Api GET "$BaseUrl/admin/realms/$Realm/users?username=$([Uri]::EscapeDataString($OwnerUsername))&exact=true") | Where-Object { $null -ne $_ -and $_.PSObject.Properties.Name -contains 'username' -and $_.username -eq $OwnerUsername }) "usuário $OwnerUsername"
@@ -229,21 +244,21 @@ $permissionResponse = @(Invoke-Api GET "$authzBase/permission?name=$encodedPermi
 $permissions = @($permissionResponse.Where({ $null -ne $_ -and $_.PSObject.Properties.Name -contains 'name' -and $_.name -eq $permissionName }))
 $permissionBody = @{
     name = $permissionName; type = 'resource'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'
-    resources = @([string]$resource._id); scopes = @([string]$scopeRecord.id); policies = @([string]$policy.id)
+    resources = @([string]$resourceId); scopes = @([string]$scopeRecord.id); policies = @([string]$policy.id)
 }
 function Update-Permission {
     param([Parameter(Mandatory)][object] $Permission)
 
     $permissionId = if ($Permission.PSObject.Properties.Name -contains 'id') { $Permission.id } else { $Permission._id }
-    $currentPolicies = @(Invoke-Api GET "$authzBase/policy/$permissionId/associatedPolicies")
-    $currentResources = @(Invoke-Api GET "$authzBase/permission/$permissionId/resources")
-    $currentScopes = @(Invoke-Api GET "$authzBase/permission/$permissionId/scopes")
+    $currentPolicies = @(@(Invoke-Api GET "$authzBase/policy/$permissionId/associatedPolicies") | ForEach-Object { $_ })
+    $currentResources = @(@(Invoke-Api GET "$authzBase/permission/$permissionId/resources") | ForEach-Object { $_ })
+    $currentScopes = @(@(Invoke-Api GET "$authzBase/permission/$permissionId/scopes") | ForEach-Object { $_ })
     $currentPolicyIds = @($currentPolicies | ForEach-Object { [string]$_.id })
     $currentResourceIds = @($currentResources | ForEach-Object {
         if ($_.PSObject.Properties.Name -contains 'id' -and $_.id) { [string]$_.id } else { [string]$_._id }
     })
     $currentScopeIds = @($currentScopes | ForEach-Object { [string]$_.id })
-    $permissionBody.resources = @($currentResourceIds + @([string]$resource._id) | Select-Object -Unique)
+    $permissionBody.resources = @($currentResourceIds + @([string]$resourceId) | Select-Object -Unique)
     $permissionBody.scopes = @($currentScopeIds + @([string]$scopeRecord.id) | Select-Object -Unique)
     $permissionBody.policies = @($currentPolicyIds + @([string]$policy.id) | Select-Object -Unique)
     Invoke-Api PUT "$authzBase/permission/resource/$permissionId" $permissionBody | Out-Null

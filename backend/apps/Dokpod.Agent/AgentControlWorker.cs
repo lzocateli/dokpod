@@ -142,6 +142,10 @@ public sealed class AgentControlWorker(
                             new AgentMessage { CommandResult = result },
                             cancellationToken).AsTask(),
                         sessionCancellation.Token);
+                    inventoryRevision = await SendInventorySnapshotAsync(
+                        outbound.Writer,
+                        inventoryRevision,
+                        sessionCancellation.Token);
                 }
                 else if (message.PayloadCase == ControlPlaneMessage.PayloadOneofCase.SnapshotRequest)
                 {

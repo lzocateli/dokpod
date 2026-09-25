@@ -38,6 +38,9 @@ decorativa.
 - habilite revisão de Code Owner quando houver revisor independente;
 - habilite Dependency Graph, Dependabot Alerts e security updates;
 - habilite Private Vulnerability Reporting, secret scanning e push protection;
+- crie o Environment `ci` e mantenha nele os secrets de integração do workflow;
+- nunca aceite secrets em commits, inclusive em workflows, testes, documentação,
+  exemplos, scripts ou connection strings;
 - mantenha `GITHUB_TOKEN` somente leitura por padrão e actions fixadas por SHA;
 - proteja tags `v*` antes da primeira release.
 
