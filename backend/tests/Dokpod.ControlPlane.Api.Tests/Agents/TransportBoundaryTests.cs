@@ -267,6 +267,9 @@ public sealed class TransportBoundaryTests
         {
             DispatchableCommands = [command],
         };
+        var inventoryStore = new FixedInventoryProjectionStore(
+            Dokpod.Domain.Inventory.InventoryReconciliationOutcome.Accepted,
+            string.Empty);
 
         try
         {
@@ -274,6 +277,7 @@ public sealed class TransportBoundaryTests
                 certificates,
                 environmentId,
                 fingerprint,
+                inventoryStore,
                 commandStore: commandStore);
             using var handler = CreateHttpHandler(certificates);
             using var channel = GrpcChannel.ForAddress(
@@ -315,6 +319,9 @@ public sealed class TransportBoundaryTests
             await commandStore.TerminalResult.Task.WaitAsync(cancellation.Token);
 
             Assert.Equal(1, engine.ExecutionCount);
+            Assert.NotNull(inventoryStore.Snapshot);
+            Assert.Equal(environmentId, inventoryStore.Snapshot.EnvironmentId);
+            Assert.True(inventoryStore.Snapshot.Revision > 0);
             Assert.Collection(
                 commandStore.Updates,
                 update => Assert.Equal(ControlPlaneCommandState.Dispatched, update.State),

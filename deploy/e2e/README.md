@@ -53,35 +53,34 @@ Ao invocar o Compose diretamente, sem o script, defina também
 
 Nunca versione certificados privados, senhas ou `.env` dentro do repositório.
 
-## Criar certificado da API
+## Configurar certificado da API
 
 A API do Dokpod exige um certificado PFX para o endpoint gRPC/mTLS. Para
-laboratório local, gere o PFX fora do repositório em UserSecrets. O exemplo
-abaixo reutiliza o certificado TLS criado para o `nginx-proxy` compartilhado do
-AltivyNotes:
+laboratório local, gere o PFX fora do repositório em UserSecrets. O certificado
+deve possuir EKU `serverAuth` e SAN DNS `api`, pois o agente conecta ao endpoint
+`https://api:7443` na rede do Compose. Não reutilize um certificado limitado a
+`localhost`.
+
+Quando a PKI dedicada já tiver produzido `dokpod-api.crt` e `dokpod-api.key`,
+exporte o PFX no mesmo diretório externo:
 
 ```powershell
-$AltivyCertsDirectory = Join-Path $env:APPDATA 'Microsoft\UserSecrets\Altivy.Notes\certs'
 $DokpodSecretsDirectory = Join-Path $env:APPDATA 'Microsoft\UserSecrets\Dokpod'
 $DokpodCertsDirectory = Join-Path $DokpodSecretsDirectory 'certs'
 New-Item -ItemType Directory -Force $DokpodCertsDirectory | Out-Null
 
 docker run --rm `
-  -v "${AltivyCertsDirectory}:/input:ro" `
-  -v "${DokpodCertsDirectory}:/output" `
+  -v "${DokpodCertsDirectory}:/certs" `
   lzocateli/nginx:1.28.0-bookworm `
   openssl pkcs12 -export `
-    -in /input/tls.crt `
-    -inkey /input/tls.key `
-    -out /output/api.pfx `
+    -in /certs/dokpod-api.crt `
+    -inkey /certs/dokpod-api.key `
+    -out /certs/dokpod-api.pfx `
     -passout pass:
 
-$env:DOKPOD_E2E_API_CERTIFICATE_PATH = Join-Path $DokpodCertsDirectory 'api.pfx'
+$env:DOKPOD_E2E_API_CERTIFICATE_PATH = Join-Path $DokpodCertsDirectory 'dokpod-api.pfx'
 $env:DOKPOD_E2E_API_CERTIFICATE_PASSWORD = ''
 ```
-
-Para um certificado de API dedicado, gere um par próprio com a autoridade local
-aprovada e exporte o PFX para o mesmo diretório externo.
 
 ## Validar e iniciar
 

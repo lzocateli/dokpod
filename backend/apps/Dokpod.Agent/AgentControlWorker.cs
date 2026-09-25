@@ -19,6 +19,7 @@ public sealed class AgentControlWorker(
     ILogger<AgentControlWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(5);
+    private const int SnapshotPageSize = 100;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -103,8 +104,13 @@ public sealed class AgentControlWorker(
             sessionId,
             established.FencingToken,
             sessionCancellation.Token);
+        ulong inventoryRevision = await SendInventorySnapshotAsync(
+            outbound.Writer,
+            0,
+            sessionCancellation.Token);
         var heartbeat = SendHeartbeatsAsync(
             outbound.Writer,
+            () => inventoryRevision,
             TimeSpan.FromSeconds(established.HeartbeatIntervalSeconds),
             sessionCancellation.Token);
 
@@ -135,6 +141,13 @@ public sealed class AgentControlWorker(
                         (result, cancellationToken) => outbound.Writer.WriteAsync(
                             new AgentMessage { CommandResult = result },
                             cancellationToken).AsTask(),
+                        sessionCancellation.Token);
+                }
+                else if (message.PayloadCase == ControlPlaneMessage.PayloadOneofCase.SnapshotRequest)
+                {
+                    inventoryRevision = await SendInventorySnapshotAsync(
+                        outbound.Writer,
+                        inventoryRevision,
                         sessionCancellation.Token);
                 }
             }
@@ -173,15 +186,74 @@ public sealed class AgentControlWorker(
 
     private static async Task SendHeartbeatsAsync(
         ChannelWriter<AgentMessage> messages,
+        Func<ulong> getInventoryRevision,
         TimeSpan interval,
         CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(interval);
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
-            await messages.WriteAsync(new AgentMessage { Heartbeat = new Heartbeat() }, cancellationToken);
+            await messages.WriteAsync(
+                new AgentMessage
+                {
+                    Heartbeat = new Heartbeat { InventoryRevision = getInventoryRevision() },
+                },
+                cancellationToken);
         }
     }
+
+    private async Task<ulong> SendInventorySnapshotAsync(
+        ChannelWriter<AgentMessage> messages,
+        ulong previousRevision,
+        CancellationToken cancellationToken)
+    {
+        var containers = await engine.ListContainersAsync(cancellationToken);
+        var observedAt = DateTimeOffset.UtcNow;
+        var clockRevision = checked((ulong)observedAt.ToUnixTimeMilliseconds());
+        var revision = Math.Max(previousRevision + 1, clockRevision);
+        var snapshotId = Guid.NewGuid().ToString("D");
+        var orderedContainers = containers
+            .OrderBy(container => container.ContainerId, StringComparer.Ordinal)
+            .ToArray();
+        var pageCount = Math.Max(1, (orderedContainers.Length + SnapshotPageSize - 1) / SnapshotPageSize);
+
+        for (var pageNumber = 0; pageNumber < pageCount; pageNumber++)
+        {
+            var page = new InventorySnapshotPage
+            {
+                SnapshotId = snapshotId,
+                InventoryRevision = revision,
+                PageNumber = checked((uint)pageNumber),
+                IsLastPage = pageNumber == pageCount - 1,
+            };
+            page.Containers.AddRange(orderedContainers
+                .Skip(pageNumber * SnapshotPageSize)
+                .Take(SnapshotPageSize)
+                .Select(container => new ContainerState
+                {
+                    ContainerId = container.ContainerId,
+                    Name = container.Name,
+                    ImageReference = container.ImageReference,
+                    State = MapContainerState(container.State),
+                    Revision = container.Revision,
+                    ObservedAt = Timestamp.FromDateTimeOffset(observedAt),
+                }));
+            await messages.WriteAsync(new AgentMessage { SnapshotPage = page }, cancellationToken);
+        }
+
+        return revision;
+    }
+
+    private static ContainerLifecycleState MapContainerState(string state) => state.ToLowerInvariant() switch
+    {
+        "created" => ContainerLifecycleState.Created,
+        "running" => ContainerLifecycleState.Running,
+        "paused" => ContainerLifecycleState.Paused,
+        "restarting" => ContainerLifecycleState.Restarting,
+        "exited" => ContainerLifecycleState.Exited,
+        "dead" => ContainerLifecycleState.Dead,
+        _ => ContainerLifecycleState.Unspecified,
+    };
 
     private static AgentMessage CreateHello(EngineDescriptor descriptor)
     {

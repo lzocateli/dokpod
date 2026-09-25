@@ -154,7 +154,7 @@ $provisionerSecret = Get-EnvironmentSecret @('DOKPOD_PROVISIONER_CLIENT_SECRET')
 if ([string]::IsNullOrWhiteSpace($provisionerSecret)) { throw 'Defina DOKPOD_PROVISIONER_CLIENT_SECRET em ambiente seguro.' }
 
 function Invoke-Api {
-    param([ValidateSet('GET','POST')][string] $Method, [string] $Uri, [object] $Body)
+    param([ValidateSet('GET','POST','PUT')][string] $Method, [string] $Uri, [object] $Body)
     $parameters = @{ Method = $Method; Uri = $Uri; Headers = @{ Authorization = "Bearer $script:accessToken" }; ErrorAction = 'Stop' }
     if ($null -ne $Body) { $parameters.ContentType = 'application/json'; $parameters.Body = $Body | ConvertTo-Json -Depth 10 -Compress }
     if ($useNoProxy) { $parameters.NoProxy = $true }
@@ -198,9 +198,13 @@ if ($OwnerUsername) {
 }
 else {
     $segments = $GroupPath.Trim('/').Split('/')
-    $parent = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups?search=$($segments[0])&exact=true" | Where-Object { $null -ne $_ -and $_.PSObject.Properties.Name -contains 'path' -and $_.path -eq "/$($segments[0])" }) "grupo $($segments[0])"
+    $rootGroups = @(Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups?search=$($segments[0])&exact=true")
+    $rootMatches = @($rootGroups | ForEach-Object { $_ } | Where-Object { $null -ne $_ -and $_.PSObject.Properties.Name -contains 'path' -and $_.path -eq "/$($segments[0])" })
+    $parent = Find-One $rootMatches "grupo $($segments[0])"
     for ($index = 1; $index -lt $segments.Count; $index++) {
-        $parent = Find-One (Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups/$($parent.id)/children?search=$($segments[$index])&exact=true" | Where-Object { $null -ne $_ -and $_.PSObject.Properties.Name -contains 'path' -and $_.path -eq "/$($segments[0..$index] -join '/')" }) "grupo $GroupPath"
+        $childGroups = @(Invoke-Api GET "$BaseUrl/admin/realms/$Realm/groups/$($parent.id)/children?search=$($segments[$index])&exact=true")
+        $childMatches = @($childGroups | ForEach-Object { $_ } | Where-Object { $null -ne $_ -and $_.PSObject.Properties.Name -contains 'path' -and $_.path -eq "/$($segments[0..$index] -join '/')" })
+        $parent = Find-One $childMatches "grupo $GroupPath"
     }
     $policyName = "environment-$EnvironmentId-group-$($segments[-1])"
     $policyType = 'group'
@@ -220,22 +224,47 @@ if ($policies.Count -eq 0) {
 else { $policy = Find-One $policies "policy $policyName"; Write-Output "Policy UMA já existe: $policyName" }
 
 $permissionName = "environment-$EnvironmentId-$($Scope.Replace(':','-'))"
-$permissionResponse = @(Invoke-Api GET "$authzBase/permission")
+$encodedPermissionName = [Uri]::EscapeDataString($permissionName)
+$permissionResponse = @(Invoke-Api GET "$authzBase/permission?name=$encodedPermissionName&exact=true")
 $permissions = @($permissionResponse.Where({ $null -ne $_ -and $_.PSObject.Properties.Name -contains 'name' -and $_.name -eq $permissionName }))
+$permissionBody = @{
+    name = $permissionName; type = 'resource'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'
+    resources = @([string]$resource._id); scopes = @([string]$scopeRecord.id); policies = @([string]$policy.id)
+}
+function Update-Permission {
+    param([Parameter(Mandatory)][object] $Permission)
+
+    $permissionId = if ($Permission.PSObject.Properties.Name -contains 'id') { $Permission.id } else { $Permission._id }
+    $currentPolicies = @(Invoke-Api GET "$authzBase/policy/$permissionId/associatedPolicies")
+    $currentResources = @(Invoke-Api GET "$authzBase/permission/$permissionId/resources")
+    $currentScopes = @(Invoke-Api GET "$authzBase/permission/$permissionId/scopes")
+    $currentPolicyIds = @($currentPolicies | ForEach-Object { [string]$_.id })
+    $currentResourceIds = @($currentResources | ForEach-Object {
+        if ($_.PSObject.Properties.Name -contains 'id' -and $_.id) { [string]$_.id } else { [string]$_._id }
+    })
+    $currentScopeIds = @($currentScopes | ForEach-Object { [string]$_.id })
+    $permissionBody.resources = @($currentResourceIds + @([string]$resource._id) | Select-Object -Unique)
+    $permissionBody.scopes = @($currentScopeIds + @([string]$scopeRecord.id) | Select-Object -Unique)
+    $permissionBody.policies = @($currentPolicyIds + @([string]$policy.id) | Select-Object -Unique)
+    Invoke-Api PUT "$authzBase/permission/resource/$permissionId" $permissionBody | Out-Null
+    Write-Output "Permission UMA atualizada: $permissionName"
+}
 if ($permissions.Count -eq 0) {
     try {
-        Invoke-Api POST "$authzBase/permission/resource" @{
-            name = $permissionName; type = 'resource'; logic = 'POSITIVE'; decisionStrategy = 'UNANIMOUS'
-            resources = @([string]$resource._id); scopes = @([string]$scopeRecord.id); policies = @([string]$policy.id)
-        } | Out-Null
+        Invoke-Api POST "$authzBase/permission/resource" $permissionBody | Out-Null
         Write-Output "Permission UMA criada: $permissionName"
     }
     catch {
         if ($_.Exception.Message -notmatch '409') { throw }
-        Write-Output "Permission UMA já existe: $permissionName"
+        $existingPermissions = @(Invoke-Api GET "$authzBase/permission?name=$encodedPermissionName&exact=true")
+        $permission = Find-One @($existingPermissions.Where({ $_.name -eq $permissionName })) "permission $permissionName"
+        Update-Permission -Permission $permission
     }
 }
-else { Write-Output "Permission UMA já existe: $permissionName" }
+else {
+    $permission = Find-One $permissions "permission $permissionName"
+    Update-Permission -Permission $permission
+}
 
 Remove-Variable adminPassword, accessToken -Scope Script -ErrorAction SilentlyContinue
 Write-Output 'Provisionamento UMA concluído.'

@@ -97,7 +97,7 @@ Evidências:
 - tela inicial Angular lista os ambientes autorizados, diferencia habilitados e desabilitados e permite cadastrar um ambiente previamente provisionado no Keycloak com antiforgery e tratamento de conflito;
 - stack E2E construída e saudável com web, BFF, API, PostgreSQL e Keycloak; acesso público pelo gateway retornou `200` e rota protegida sem sessão retornou `302` para login;
 - PKI E2E externa gerada em UserSecrets com CA local, certificado de servidor `serverAuth` e certificado de agente `clientAuth`; API, gateway e health foram validados com a nova cadeia;
-- jornada autenticada, identidade/ambiente provisionado do agente e validação de reconexão após revogação permanecem pendentes; o perfil `agent` exige UUID e identidade previamente provisionados no PostgreSQL;
+- jornada autenticada validada com usuário sintético, sessão BFF, catálogo e ambiente autorizado; autorização horizontal negativa e reconexão após revogação permanecem pendentes;
 
 ### P-04: Inventário reconciliável
 
@@ -128,6 +128,8 @@ Evidências:
 - contrato OpenAPI documenta a consulta paginada do inventário e seus erros;
 - teste PostgreSQL real comprova substituição atômica de snapshot, atualização de container existente e paginação por cursor;
 - teste de transporte mTLS comprova persistência do snapshot completo e entrega da invalidação SignalR;
+- agente publica snapshot inicial paginado logo após estabelecer a sessão e responde a solicitações de ressincronização; teste de transporte focado aprovado;
+- stack E2E real persistiu revisão monotônica e 16 containers do Docker Desktop após corrigir o certificado de servidor para SAN `api`;
 - autorização HTTP horizontal permanece pendente;
 - carga nominal de 56 agentes, aproximadamente 1.120 containers e 30 usuários simultâneos por 30 minutos: **NOT RUN**.
 
@@ -186,7 +188,7 @@ Evidências:
 - UI Angular de lifecycle implementada em rota lazy por ambiente, com inventário paginado, idade da projeção, estados loading/vazio/erro/forbidden/indisponível, ações filtradas por scope e confirmação contextual de exclusão;
 - cliente OpenAPI gerado opera same-origin pelo BFF, obtém antiforgery antes de mutações, envia chave idempotente e acompanha o comando por polling cancelável até estado terminal;
 - testes frontend: 10 aprovados, cobrindo catálogo, cadastro, sessão expirada, fachada de lifecycle, erro `403`, refresh após resultado terminal e headers/corpo efetivamente enviados pelo cliente gerado; build Angular de produção aprovado;
-- fluxo black-box autenticado e screenshots contra a stack E2E permanecem pendentes.
+- fluxo black-box autenticado aprovado com 4 testes e 0 skips para sessão, catálogo, ambiente, inventário e visibilidade das ações; mutações, cenários negativos e screenshots permanecem pendentes.
 - duração de retenção e janela máxima de replay dos tombstones permanecem decisões operacionais humanas antes de produção; a garantia equivalente do journal no agente Windows será qualificada em P-07.
 
 ### P-06: Hardening e release candidata
@@ -282,3 +284,6 @@ Começar com Keycloak e plano de controle containerizados em laboratório e um �
 | 2026-09-21 | P-03 | in-progress | in-progress | catálogo autorizado e cadastro de ambientes adicionados à tela inicial; provisionamento Keycloak e E2E horizontal seguem pendentes | IA assistida |
 | 2026-09-22 | P-05 | in-progress | in-progress | comandos particionados mensalmente com chave global idempotente, fallback default, pruning e 22 testes PostgreSQL reais; duração de retenção aguarda decisão humana | IA assistida |
 | 2026-09-23 | P-03 | in-progress | in-progress | revogação persistente da identidade do agente e invalidação ativa da sessão adicionadas com autorização, auditoria, endpoint e testes; integração real PostgreSQL/Keycloak e E2E seguem pendentes | IA assistida |
+| 2026-09-24 | P-03 | in-progress | in-progress | usuário sintético, sessão BFF, catálogo e ambiente autorizado validados com Keycloak e UMA reais; autorização horizontal negativa e revogação E2E seguem pendentes | IA assistida |
+| 2026-09-24 | P-04 | in-progress | in-progress | agente passou a publicar snapshot inicial paginado; PostgreSQL convergiu para 16 containers reais pelo stream mTLS | IA assistida |
+| 2026-09-24 | P-05 | in-progress | in-progress | Playwright autenticado aprovou 4 testes sem skips para sessão, catálogo, ambiente, inventário e ações visíveis; mutações e screenshots seguem pendentes | IA assistida |

@@ -25,16 +25,21 @@ $reports = Join-Path $PWD 'artifacts\e2e\playwright'
 New-Item -ItemType Directory -Force $reports | Out-Null
 
 docker run --rm `
+  --network host `
   --volume "${PWD}\frontend\tests\e2e:/app/tests:ro" `
   --volume "${reports}:/app/reports" `
-  --env DOKPOD_E2E_BASE_URL=https://host.docker.internal:7443/dokpod/ `
+  --env DOKPOD_E2E_BASE_URL=https://localhost:7443/dokpod/ `
   --env DOKPOD_E2E_USERNAME `
   --env DOKPOD_E2E_PASSWORD `
   --env DOKPOD_E2E_ENVIRONMENT_ID `
   lzocateli/playwright-e2e:0.1.0 `
-  --base-url=https://host.docker.internal:7443/dokpod/ `
+  --base-url=https://localhost:7443/dokpod/ `
   /app/tests
 ```
+
+O hostname `localhost` deve ser preservado porque ele faz parte dos callbacks
+OIDC e da configuração pública do gateway. A rede host permite que o Chromium
+containerizado use essa URL canônica sem substituir o header `Host`.
 
 O valor de `DOKPOD_E2E_PASSWORD` deve ser digitado ou injetado pelo mecanismo de secrets do ambiente. Não coloque a senha em linha de comando versionada, arquivo `.env` do repositório ou relatório.
 

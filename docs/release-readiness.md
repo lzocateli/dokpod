@@ -6,7 +6,7 @@
 **Base:** branch `development`, commit `f013471`  
 **Plano relacionado:** [MVP do Dokpod](plan/mvp.md)  
 
-**Atualização desta avaliação:** 2026-09-23, após smoke da stack candidata.  
+**Atualização desta avaliação:** 2026-09-24, após E2E autenticado da stack candidata.  
 
 ## Resumo executivo
 
@@ -37,7 +37,9 @@ Estimativa de maturidade:
 - Smoke pelo gateway: web `200` e rota protegida sem sessão `302`.
 - Imagem `lzocateli/k6:2.1.0-node24.15.0-bookworm` validada (`k6 v2.1.0`).
 - Imagem `lzocateli/playwright-e2e:0.1.0` validada e disponível para a suíte.
-- Suíte Playwright autenticada criada em `frontend/tests/e2e` e coleta containerizada validada com 4 testes; execução autenticada ainda depende de credenciais e ambiente de homologação.
+- Usuário sintético, sessão BFF e autorização UMA provisionados pelo fluxo administrativo suportado, com credenciais somente em UserSecrets.
+- Agente Linux publicou snapshot inicial paginado pelo stream mTLS; a projeção PostgreSQL convergiu para 16 containers reais.
+- Suíte Playwright autenticada executada pela URL canônica do gateway: **4 testes aprovados, 0 skips**, cobrindo sessão, catálogo, ambiente, inventário e visibilidade das quatro ações autorizadas.
 
 ## Matriz de gates
 
@@ -48,13 +50,13 @@ Estimativa de maturidade:
 | Transporte gRPC/mTLS | PASS PARCIAL | Transporte e agentes validados em laboratório; reconexão após revogação ponta a ponta ainda pendente. |
 | Docker Linux real | PASS PARCIAL | Unix socket, inventário e sessão validados; ciclo completo de quatro mutações precisa permanecer registrado em execução E2E final. |
 | PostgreSQL real | PASS PARCIAL | Migrations e vários testes reais aprovados; suíte não é executada integralmente em todo ciclo local. |
-| Keycloak real | PASS PARCIAL | Serviços saudáveis e proteção sem sessão validada; login autenticado e autorização horizontal pendentes. |
-| E2E autenticado | NOT RUN | Suíte versionada e coletada; execução depende de usuário sintético, permissões e ambiente de homologação, sem credenciais no repositório. |
+| Keycloak real | PASS PARCIAL | Login autenticado, grupo e UMA do ambiente validados; autorização horizontal negativa permanece pendente. |
+| E2E autenticado | PASS PARCIAL | 4 testes aprovados sem skips para sessão, catálogo, ambiente, inventário e ações visíveis; mutações e cenários negativos permanecem pendentes. |
 | Autorização horizontal | NOT RUN | Falta provar que usuário não acessa outro ambiente, inventário, comando ou SignalR. |
 | Revogação e reconexão | NOT RUN | Falta prova real PostgreSQL/Keycloak de bloqueio de reconexão após revogação. |
 | Carga nominal | NOT RUN | 56 agentes, 1.120 containers e 30 usuários por 30 minutos ainda não executados; deve rodar em VM real isolada. |
 | Carga de margem | NOT RUN | 100 agentes, 2.000 containers e 50 usuários ainda não executados. |
-| Angular produção | PASS PARCIAL | Build de produção validado; fluxo autenticado e screenshots ainda pendentes. |
+| Angular produção | PASS PARCIAL | Build de produção e fluxo autenticado validados; screenshots responsivos ainda pendentes. |
 | Imagens de produção | NOT RUN | Falta gate automatizado para build, smoke, portas, mounts, usuário e health de todas as imagens. |
 | SBOM e vulnerabilidades | NOT RUN | Falta SBOM, Trivy e política formal de bloqueio/aceite. |
 | Assinatura e provenance | NOT RUN | Imagens e pacote Windows ainda não possuem gate de assinatura/proveniência validado. |
@@ -139,7 +141,7 @@ Publicar inicialmente somente a combinação comprovada. A recomendação atual 
 
 ## Sequência mínima recomendada
 
-1. Criar a jornada Playwright autenticada com Keycloak.
+1. Completar a jornada Playwright com mutações, confirmação de exclusão e cenários negativos.
 2. Provar autorização horizontal e revogação/reconexão com PostgreSQL real.
 3. Executar todos os testes PostgreSQL no pipeline.
 4. Executar carga nominal e carga de margem.

@@ -32,6 +32,21 @@ manage-users e manage-authorization).
 E-mail do usuário inicial do laboratório. Quando omitido, usa DOKPOD_ADMIN_EMAIL;
 se nenhum valor existir, não cria usuário.
 
+.PARAMETER InitialUsername
+Nome do usuário inicial. Padrão: dokpod-admin.
+
+.PARAMETER InitialUserPasswordVariable
+Nome da variável de ambiente que contém a senha inicial. Padrão:
+DOKPOD_ADMIN_TEMPORARY_PASSWORD.
+
+.PARAMETER ResetInitialUserPassword
+Redefine a senha mesmo quando o usuário já existe. Use somente para rotação
+explícita, pois a política de histórico do realm rejeita reutilização.
+
+.PARAMETER PermanentInitialUserPassword
+Define a senha reconciliada como permanente. Por padrão, a senha inicial é
+temporária.
+
 .PARAMETER BffBaseUrl
 Origem externa do BFF. Padrão: https://localhost:7443.
 
@@ -95,8 +110,20 @@ param(
     [ValidatePattern('^[^@\s]+@[^@\s]+\.[^@\s]+$')]
     [string] $InitialUserEmail,
 
+    [ValidatePattern('^[a-z0-9][a-z0-9._-]+$')]
+    [string] $InitialUsername = 'dokpod-admin',
+
+    [ValidatePattern('^[A-Z][A-Z0-9_]+$')]
+    [string] $InitialUserPasswordVariable = 'DOKPOD_ADMIN_TEMPORARY_PASSWORD',
+
+    [switch] $ResetInitialUserPassword,
+
+    [switch] $PermanentInitialUserPassword,
+
     [ValidatePattern('^https?://')]
     [string] $BffBaseUrl = 'https://localhost:7443/dokpod',
+
+    [string[]] $RequiredActions = @(),
 
     [switch] $SkipUser,
 
@@ -214,7 +241,7 @@ if ($Bootstrap) {
     )
 }
 if ($InitialUserEmail -and -not $SkipUser) {
-    $plannedResources += "usuário dokpod-admin ($InitialUserEmail) no grupo administrators"
+    $plannedResources += "usuário $InitialUsername ($InitialUserEmail) no grupo administrators"
 }
 
 if ($DryRun) {
@@ -649,14 +676,17 @@ foreach ($role in $roles) {
 Write-Output 'Reconciliadas roles e associações de grupos.'
 
 if ($InitialUserEmail -and -not $SkipUser) {
-    $users = @(Invoke-KeycloakApi GET "/admin/realms/$Realm/users?username=dokpod-admin&exact=true")
-    $initialUser = $users | Where-Object username -eq 'dokpod-admin' | Select-Object -First 1
+    $encodedInitialUsername = [Uri]::EscapeDataString($InitialUsername)
+    $users = @(Invoke-KeycloakApi GET "/admin/realms/$Realm/users?username=$encodedInitialUsername&exact=true")
+    $initialUser = $users | Where-Object username -eq $InitialUsername | Select-Object -First 1
     $initialUserCreated = $false
-    $requiredActions = @('UPDATE_PASSWORD', 'CONFIGURE_TOTP')
-    if ($smtpHost) { $requiredActions += 'VERIFY_EMAIL' }
+    $requiredActions = @($RequiredActions | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($requiredActions.Count -eq 0 -and $InitialUserEmail -and $smtpHost -and $PSBoundParameters.ContainsKey('RequiredActions') -eq $false) {
+        $requiredActions = @()
+    }
     $userRepresentation = @{
-        username = 'dokpod-admin'; email = $InitialUserEmail; firstName = 'Dokpod'; lastName = 'Admin'
-        enabled = $true; emailVerified = $false
+        username = $InitialUsername; email = $InitialUserEmail; firstName = 'Dokpod'; lastName = 'User'
+        enabled = $true; emailVerified = $true
         requiredActions = $requiredActions
     }
     if ($initialUser) {
@@ -664,21 +694,21 @@ if ($InitialUserEmail -and -not $SkipUser) {
     }
     else {
         Invoke-KeycloakApi POST "/admin/realms/$Realm/users" $userRepresentation | Out-Null
-        $initialUser = [pscustomobject]@{ id = Get-CreatedResourceId; username = 'dokpod-admin' }
+        $initialUser = [pscustomobject]@{ id = Get-CreatedResourceId; username = $InitialUsername }
         $initialUserCreated = $true
     }
-    if (-not $initialUser) { throw 'Usuário dokpod-admin não foi localizado após a criação.' }
+    if (-not $initialUser) { throw "Usuário $InitialUsername não foi localizado após a criação." }
 
-    $temporaryPassword = Get-EnvironmentSecret @('DOKPOD_ADMIN_TEMPORARY_PASSWORD')
-    if ($temporaryPassword -and $initialUserCreated) {
-        Assert-TemporaryPasswordPolicy $temporaryPassword
+    $initialPassword = Get-EnvironmentSecret @($InitialUserPasswordVariable)
+    if ($initialPassword -and ($initialUserCreated -or $ResetInitialUserPassword)) {
+        Assert-TemporaryPasswordPolicy $initialPassword
         Invoke-KeycloakApi PUT "/admin/realms/$Realm/users/$($initialUser.id)/reset-password" @{
-            type = 'password'; value = $temporaryPassword; temporary = $true
+            type = 'password'; value = $initialPassword; temporary = -not $PermanentInitialUserPassword
         } | Out-Null
     }
     $administratorGroupId = Ensure-GroupPath @('dokpod', 'administrators')
     Invoke-KeycloakApi PUT "/admin/realms/$Realm/users/$($initialUser.id)/groups/$administratorGroupId" $null | Out-Null
-    Write-Output 'Reconciliado usuário dokpod-admin no grupo administrators.'
+    Write-Output "Reconciliado usuário $InitialUsername no grupo administrators."
 }
 
 $providers = @(
